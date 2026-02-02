@@ -24,7 +24,6 @@ apt-get install -y \
     vim \
     git \
     libdatetime-perl \
-    libtls26 \
     libtls-dev \
     libdigest-sha-perl \
     libexpat1-dev \
