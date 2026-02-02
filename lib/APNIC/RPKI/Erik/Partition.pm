@@ -3,64 +3,12 @@ package APNIC::RPKI::Erik::Partition;
 use warnings;
 use strict;
 
+use APNIC::RPKI::Erik::ASN1;
+
 use Convert::ASN1;
 use DateTime;
 
 use constant ID_SHA256 => '2.16.840.1.101.3.4.2.1';
-
-use constant ERIK_PARTITION_ASN1 => q(
-  GeneralName ::= CHOICE {
-    uniformResourceIdentifier [6] IA5String }
-
-  Digest ::= OCTET STRING
-
-  DigestAlgorithmIdentifier ::= OBJECT IDENTIFIER
-
-  KeyIdentifier ::= OCTET STRING
-
-  AccessDescription  ::=  SEQUENCE {
-    accessMethod   OBJECT IDENTIFIER,
-    accessLocation GeneralName }
-
-  AlgorithmIdentifier ::= SEQUENCE {
-    algorithm      OBJECT IDENTIFIER,
-    parameters     ANY DEFINED BY algorithm OPTIONAL }
-
-  ErikIndex ::= SEQUENCE {
-    version [0]    INTEGER OPTIONAL, -- DEFAULT 0,
-    indexScope     IA5String,
-    indexTime      GeneralizedTime,
-    -- Draft has DigestAlgorithmIdentifier, but rpkitouch uses
-    -- AlgorithmIdentifier.
-    -- hashAlg        DigestAlgorithmIdentifier,
-    hashAlg        AlgorithmIdentifier,
-    partitionList  SEQUENCE OF PartitionRef }
-
-  PartitionRef ::= SEQUENCE {
-    hash           Digest,
-    size           INTEGER }
-
-  ErikPartition ::= SEQUENCE {
-    version [0]    INTEGER OPTIONAL, -- DEFAULT 0,
-    partitionTime  GeneralizedTime,
-    -- Draft has DigestAlgorithmIdentifier, but rpkitouch uses
-    -- AlgorithmIdentifier.
-    -- hashAlg        DigestAlgorithmIdentifier,
-    hashAlg        AlgorithmIdentifier,
-    manifestList   SEQUENCE OF ManifestRef }
-
-  ManifestRef ::= SEQUENCE {
-    hash           Digest,
-    size           INTEGER, -- (1000..MAX),
-    aki            KeyIdentifier,
-    manifestNumber INTEGER, -- (0..MAX),
-    thisUpdate     GeneralizedTime,
-    locations      SEQUENCE OF AccessDescription }
-
-  ContentInfoErikPartition ::= SEQUENCE {
-    contentType    OBJECT IDENTIFIER,
-    partition      [0] EXPLICIT ErikPartition }
-);
 
 use base qw(Class::Accessor);
 APNIC::RPKI::Erik::Partition->mk_accessors(qw(
@@ -76,18 +24,8 @@ sub new
 {
     my ($class) = @_;
 
-    my $parser = Convert::ASN1->new();
-    $parser->configure(
-        encoding => "DER",
-        encode   => { time => "utctime" },
-        decode   => { time => "utctime" },
-    );
-    my $res = $parser->prepare(ERIK_PARTITION_ASN1());
-    if (not $res) {
-        die $parser->error();
-    }
+    my $parser = APNIC::RPKI::Erik::ASN1::get_parser();
     $parser = $parser->find('ContentInfoErikPartition');
-
     my $self = { parser => $parser };
     bless $self, $class;
     return $self;
@@ -122,7 +60,7 @@ sub decode
             locations => $ml->{'locations'}
         };
     }
-    $self->manifest_list(@manifest_list);
+    $self->manifest_list(\@manifest_list);
 
     return 1;
 }
@@ -158,6 +96,9 @@ sub encode
 
     my $parser = $self->{'parser'};
     my $enc_data = $parser->encode($data);
+    if (not $enc_data) {
+        die $parser->error();
+    }
     return $enc_data;
 }
 
