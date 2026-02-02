@@ -6,6 +6,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - run: |
+          sudo ./docker-prep.sh
           export APNIC_DEBUG=1
           sudo cpanm -v --installdeps .
           sudo make clean || true

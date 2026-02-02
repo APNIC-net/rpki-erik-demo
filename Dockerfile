@@ -2,43 +2,13 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y
-RUN apt-get install -y \
-    libhttp-daemon-perl \
-    liblist-moreutils-perl \
-    libwww-perl \
-    libcarp-always-perl \
-    libconvert-asn1-perl \
-    libclass-accessor-perl \
-    libssl-dev \
-    libyaml-perl \
-    libxml-libxml-perl \
-    libio-capture-perl \
-    libnet-ip-perl \
-    make \
-    wget \
-    patch \
-    gcc \
-    rsync \
-    libfile-slurp-perl \
-    libjson-xs-perl \
-    cpanminus \
-    jq \
-    vim \
-    git \
-    libdatetime-perl \
-    libtls26 \
-    libtls-dev \
-    libdigest-sha-perl \
-    libexpat1-dev \
-    sudo
-RUN cpanm Set::IntSpan Net::CIDR::Set
-RUN wget https://ftp.openssl.org/source/openssl-1.0.2p.tar.gz \
-    && tar xf openssl-1.0.2p.tar.gz \
-    && cd openssl-1.0.2p \
-    && ./config enable-rfc3779 \
-    && make \
-    && make install
+RUN apt-get install -y build-essential sudo
+COPY ./docker-prep.sh .
+RUN ./docker-prep.sh
 RUN yes | unminimize
 COPY . /root/rpki-erik-demo
-RUN cd /root/rpki-erik-demo/ && perl Makefile.PL && make
+WORKDIR /root/rpki-erik-demo
+RUN sudo cpanm -v -n --installdeps .
+RUN sudo make clean || true
+RUN perl Makefile.PL && make
 CMD /bin/bash
