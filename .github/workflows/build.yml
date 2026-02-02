@@ -1,0 +1,12 @@
+name: build
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v1
+      - run: |
+          export APNIC_DEBUG=1
+          sudo cpanm -v --installdeps .
+          sudo make clean || true
+          perl Makefile.PL && make && make test
