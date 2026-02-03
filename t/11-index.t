@@ -33,9 +33,9 @@ my $path = "eg/rpki.ripe.net.b64";
     $index->index_scope("test.example.net");
     $index->index_time(DateTime->now());
     my @partition_list = (
-        { hash => "myhash",
+        { hash => "ABCD",
           size => 10 },
-        { hash => "myhash",
+        { hash => "ABCD",
           size => 10 }
     );
     $index->partition_list(\@partition_list);

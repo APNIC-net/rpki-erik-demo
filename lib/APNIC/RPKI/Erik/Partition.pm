@@ -52,12 +52,12 @@ sub decode
     my @manifest_list;
     for my $ml (@{$partition->{'manifestList'}}) {
         push @manifest_list, {
-            hash     => $ml->{'hash'},
-            size     => $ml->{'size'},
-            aki     => $ml->{'aki'},
-            manifest_number     => $ml->{'manifestNumber'},
-            this_update => DateTime->from_epoch(epoch => $ml->{'thisUpdate'}),
-            locations => $ml->{'locations'}
+            hash            => unpack('H*', $ml->{'hash'}),
+            size            => $ml->{'size'},
+            aki             => unpack('H*', $ml->{'aki'}),
+            manifest_number => $ml->{'manifestNumber'},
+            this_update     => DateTime->from_epoch(epoch => $ml->{'thisUpdate'}),
+            locations       => $ml->{'locations'}
         };
     }
     $self->manifest_list(\@manifest_list);
@@ -78,12 +78,12 @@ sub encode
             },
             manifestList => [
                 map { +{
-                    hash => $_->{'hash'},
-                    size => $_->{'size'},
-                    aki  => $_->{'aki'},
+                    hash           => pack('H*', $_->{'hash'}),
+                    size           => $_->{'size'},
+                    aki            => pack('H*', $_->{'aki'}),
                     manifestNumber => $_->{'manifest_number'},
-                    thisUpdate => $_->{'this_update'}->epoch(),
-                    locations => [ map { +{
+                    thisUpdate     => $_->{'this_update'}->epoch(),
+                    locations      => [ map { +{
                         accessMethod   => "1.3.6.1.5.5.7.48.11",
                         accessLocation => {
                             uniformResourceIdentifier => $_,

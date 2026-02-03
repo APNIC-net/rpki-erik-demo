@@ -54,7 +54,7 @@ sub decode
     my @partition_list;
     for my $ml (@{$index->{'partitionList'}}) {
         push @partition_list, {
-            hash => $ml->{'hash'},
+            hash => unpack('H*', $ml->{'hash'}),
             size => $ml->{'size'},
         };
     }
@@ -77,7 +77,7 @@ sub encode
             },
             partitionList => [
                 map { +{
-                    hash => $_->{'hash'},
+                    hash => pack('H*', $_->{'hash'}),
                     size => $_->{'size'},
                 } } (@{$self->partition_list()})
             ]
