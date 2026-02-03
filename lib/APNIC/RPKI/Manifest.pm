@@ -72,7 +72,7 @@ sub decode
         die $parser->error();
     }
 
-    $self->manifest_number($data->{'manifest_number'});
+    $self->manifest_number($data->{'manifestNumber'});
     $self->this_update(DateTime->from_epoch(epoch => $data->{'thisUpdate'}));
     $self->next_update(DateTime->from_epoch(epoch => $data->{'nextUpdate'}));
 
