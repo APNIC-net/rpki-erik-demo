@@ -7,6 +7,7 @@ use APNIC::RPKI::Erik::Index;
 use APNIC::RPKI::Erik::Partition;
 use APNIC::RPKI::Manifest;
 use APNIC::RPKI::OpenSSL;
+use APNIC::RPKI::Utils qw(dprint);
 
 use File::Slurp qw(read_file write_file);
 use LWP::UserAgent;
@@ -47,13 +48,16 @@ sub synchronise
     my $openssl = $self->{'openssl'};
 
     for my $fqdn (@{$fqdns}) {
+        dprint("Synchronising '$fqdn'");
         my $base_url = "http://$hostname/.well-known";
         my $index_url = "$base_url/erik/index/$fqdn";
+        dprint("Fetching index '$index_url'");
         my $index_res = $ua->get($index_url);
         if (not $index_res->is_success()) {
             die "Unable to fetch index file: ".
                 $index_res->status_line();
         }
+        dprint("Fetched index '$index_url'");
 
         my $index_content = $index_res->decoded_content();
         my $index = APNIC::RPKI::Erik::Index->new();
@@ -69,16 +73,20 @@ sub synchronise
         for my $entry (@partition_list) {
             my ($size, $hash) =
                 @{$entry}{qw(size hash)};
+            dprint("Processing partition '$hash' with size '$size'");
             my $partition_url = hash_to_url($hostname, $hash);
+            dprint("Fetching partition '$partition_url'");
             my $partition_res = $ua->get($partition_url);
             if (not $partition_res->is_success()) {
                 die "Unable to fetch partition file: ".
                     $partition_res->status_line();
             }
+            dprint("Fetched partition '$partition_url'");
 
-            my $partition_content = $partition_res->decoded_content();
+            my $partition_content = $partition_res->content();
             my $partition = APNIC::RPKI::Erik::Partition->new();
             $partition->decode($partition_content);
+            dprint("Decoded partition '$partition_url'");
 
             my @manifest_list = @{$partition->manifest_list()};
             for my $entry (@manifest_list) {
@@ -87,9 +95,12 @@ sub synchronise
                                  locations aki)};
                 my @locs = sort @{$locations};
                 my $location = $locs[0];
+                dprint("Processing manifest '$location' (number ".
+                       "'$mftnum', size '$size')");
                 my $uri = URI->new($location);
                 my $path = $uri->path();
                 $path =~ s/^\///;
+                $path = $uri->host()."/$path";
                 my ($pdir) = ($path =~ /^(.*)\//);
                 my ($file) = ($path =~ /^.*\/(.*)$/);
                 chdir $dir or die $!;
@@ -106,20 +117,27 @@ sub synchronise
                     $get = 1;
                 }
                 if ($get) {
+                    dprint("Need to fetch manifest '$location'"); 
                     my $manifest_url = hash_to_url($hostname, $hash);
+                    dprint("Fetching manifest '$manifest_url'");
                     my $mft_res = $ua->get($manifest_url);
                     if (not $mft_res->is_success()) {
                         die "Unable to fetch manifest: ".
                             $mft_res->status_line();
                     }
                     write_file($path, $mft_res->decoded_content());
+                    dprint("Fetched manifest '$manifest_url'");
+                    dprint("Wrote manifest to path '$path'");
 
 		    my $mdata = $openssl->verify_cms($path);
                     my $manifest = APNIC::RPKI::Manifest->new();
                     $manifest->decode($mdata);
                     my @files = @{$manifest->files() || []};
+                    my $file_count = scalar @files;
+                    dprint("Manifest file count: '$file_count'");
                     for my $file (@files) {
                         my $filename = $file->{'filename'};
+                        dprint("Processing file '$filename'");
                         my $hash = $file->{'hash'};
                         my $fpath = "$pdir/$filename";
                         my $get = 0;
@@ -135,18 +153,27 @@ sub synchronise
                         }
                         if ($get) {
                             my $o_url = hash_to_url($hostname, $hash);
+                            dprint("Fetching file '$o_url'");
                             my $res = $ua->get($o_url);
                             if (not $res->is_success()) {
                                 die "Unable to fetch object: ".
                                     $res->status_line();
                             }
                             write_file($fpath, $res->decoded_content());
+                            dprint("Fetched file '$o_url'");
+                            dprint("Wrote file to path '$fpath'");
+                        } else {
+                            dprint("Do not need to fetch file '$file'");
                         }
                     }
+                } else {
+                    dprint("Do not need to fetch manifest '$location'");
                 }
             }
         }
     }
+
+    return 1;
 }
 
 1;

@@ -5,7 +5,9 @@ use strict;
 
 use APNIC::RPKI::Erik::Updater;
 use APNIC::RPKI::Erik::Client;
+use APNIC::RPKI::Erik::Server;
 
+use Cwd qw(cwd);
 use DateTime;
 use File::Temp qw(tempdir);
 use File::Slurp qw(read_file write_file);
@@ -13,14 +15,37 @@ use File::Slurp qw(read_file write_file);
 use Test::More tests => 1;
 
 {
+    my $cwd = cwd();
     my $td = tempdir(CLEANUP => 1);
-
     my $updater =
         APNIC::RPKI::Erik::Updater->new(
             "eg/repo", $td
         );
     $updater->synchronise();
-    ok(1);
+
+    my $server = APNIC::RPKI::Erik::Server->new(0, $td);
+    my $port = $server->{'port'};
+    my $pid;
+    if ($pid = fork()) {
+    } else {
+        $server->run();
+        exit(0);
+    }
+
+    my $otd = tempdir(CLEANUP => 1);
+    my $client = APNIC::RPKI::Erik::Client->new($otd);
+    eval {
+        $client->synchronise("localhost:$port", ["rpki.roa.net"]);
+    };
+    my $error = $@;
+    ok((not $error),
+        "Synchronised remote content successfully");
+    diag $error if $error;
+
+    chdir $cwd or die $!;
+    my @differences = `diff -r eg/repo $otd`;
+    ok((not @differences), "Synchronisation result matches original");
+    diag @differences;
 }
 
 1;
