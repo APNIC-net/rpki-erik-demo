@@ -12,7 +12,9 @@ use DateTime;
 use File::Temp qw(tempdir);
 use File::Slurp qw(read_file write_file);
 
-use Test::More tests => 1;
+use Test::More tests => 2;
+
+my $pid;
 
 {
     my $cwd = cwd();
@@ -25,7 +27,6 @@ use Test::More tests => 1;
 
     my $server = APNIC::RPKI::Erik::Server->new(0, $td);
     my $port = $server->{'port'};
-    my $pid;
     if ($pid = fork()) {
     } else {
         $server->run();
@@ -46,6 +47,12 @@ use Test::More tests => 1;
     my @differences = `diff -r eg/repo $otd`;
     ok((not @differences), "Synchronisation result matches original");
     diag @differences;
+}
+
+END {
+    if ($pid) {
+        kill('TERM', $pid);
+    }
 }
 
 1;
