@@ -9,7 +9,7 @@ use List::Util qw(first);
 use Net::CIDR::Set;
 use Set::IntSpan;
 
-use APNIC::RPKI::Utilities qw(system_ad);
+use APNIC::RPKI::Utils qw(system_ad);
 
 our $VERSION = '0.1';
 

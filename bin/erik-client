@@ -1,0 +1,45 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use Getopt::Long;
+
+use APNIC::RPKI::Erik::Client;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --cache-dir {cache-dir} --server {host[:port]} --fqdn {fqdn}
+
+Synchronises the local cache against the specified server for the
+specified RPKI repository FQDN.
+EOF
+
+    exit(10);
+}
+
+my %options;
+GetOptions(\%options, 'cache-dir=s', 'server=s', 'fqdn=s');
+if (not $options{'cache-dir'}) {
+    print "Please provide a cache directory.\n";
+    usage();
+}
+if (not $options{'server'}) {
+    print "Please provide a server.\n";
+    usage();
+}
+if (not $options{'fqdn'}) {
+    print "Please provide an FQDN.\n";
+    usage();
+}
+
+my $cache_dir = $options{'cache-dir'};
+my $server = $options{'server'};
+my $fqdn = $options{'fqdn'};
+
+my $client = APNIC::RPKI::Erik::Client->new($cache_dir);
+$client->synchronise($server, [$fqdn]);
+
+1;

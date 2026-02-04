@@ -10,5 +10,5 @@ COPY . /root/rpki-erik-demo
 WORKDIR /root/rpki-erik-demo
 RUN sudo cpanm -v -n --installdeps .
 RUN sudo make clean || true
-RUN perl Makefile.PL && make
+RUN perl Makefile.PL && make && sudo make install
 CMD /bin/bash

@@ -14,7 +14,11 @@ my $output = WriteMakefile(
             repository => 'https://github.com/APNIC-net/rpki-erik-demo'
         }
     },
-    EXE_FILES      => [],
+    EXE_FILES      => [
+        'bin/erik-client',
+        'bin/erik-server',
+        'bin/erik-updater',
+    ],
     PREREQ_PM      => { 'Test::More'      => 0,
                         'File::Slurp'     => 0,
                         'IO::Socket'      => 0,

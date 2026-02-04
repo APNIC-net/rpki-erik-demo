@@ -1,0 +1,40 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use Getopt::Long;
+
+use APNIC::RPKI::Erik::Updater;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --cache-dir {cache-dir} --httpd-dir {httpd-dir}
+
+Writes Erik content to httpd-dir, based on the current state of
+cache-dir.
+EOF
+
+    exit(10);
+}
+
+my %options;
+GetOptions(\%options, 'cache-dir=s', 'httpd-dir=s');
+if (not $options{'cache-dir'}) {
+    print "Please provide a cache directory.\n";
+    usage();
+}
+if (not $options{'httpd-dir'}) {
+    print "Please provide a httpd directory.\n";
+    usage();
+}
+
+my $cache_dir = $options{'cache-dir'};
+my $httpd_dir = $options{'httpd-dir'};
+
+my $updater = APNIC::RPKI::Erik::Updater->new($cache_dir, $httpd_dir);
+$updater->synchronise();
+
+1;

@@ -10,6 +10,7 @@ use APNIC::RPKI::OpenSSL;
 use APNIC::RPKI::Utils qw(dprint);
 
 use Cwd qw(cwd);
+use Digest::SHA;
 use File::Slurp qw(read_file write_file);
 use LWP::UserAgent;
 use MIME::Base64 qw(encode_base64url);

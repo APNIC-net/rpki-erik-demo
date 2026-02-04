@@ -1,0 +1,40 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use Getopt::Long;
+
+use APNIC::RPKI::Erik::Server;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --port {port} --httpd-dir {httpd-dir}
+
+Starts a simple HTTP server on the specified port that returns content
+per the directory structure in httpd-dir. 
+EOF
+
+    exit(10);
+}
+
+my %options;
+GetOptions(\%options, 'port=s', 'httpd-dir=s');
+if (not $options{'port'}) {
+    print "Please provide a port.\n";
+    usage();
+}
+if (not $options{'httpd-dir'}) {
+    print "Please provide a httpd directory (see updater).\n";
+    usage();
+}
+
+my $httpd_dir = $options{'httpd-dir'};
+my $port = $options{'port'};
+
+my $server = APNIC::RPKI::Erik::Server->new($port, $httpd_dir);
+$server->run();
+
+1;
