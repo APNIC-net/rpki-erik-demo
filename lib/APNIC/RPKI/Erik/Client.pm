@@ -12,6 +12,7 @@ use APNIC::RPKI::Utils qw(dprint);
 use Cwd qw(cwd);
 use Digest::SHA;
 use File::Slurp qw(read_file write_file);
+use JSON::XS qw(encode_json decode_json);
 use HTTP::Async;
 use LWP::UserAgent;
 use MIME::Base64 qw(encode_base64url);
@@ -57,9 +58,18 @@ sub synchronise
     my $async = HTTP::Async->new();
     my %id_to_rmd;
     my %relevant_files;
+    my %fqdn_to_pt_to_mft_to_file;
 
     for my $fqdn (@{$fqdns}) {
         dprint("Requesting index for '$fqdn'");
+        my $mp = "$dir/${fqdn}-metadata";
+        if (-e $mp) {
+            my $content = read_file($mp);
+            my $data = decode_json($content);
+            $fqdn_to_pt_to_mft_to_file{$fqdn} = $data;
+        } else {
+            $fqdn_to_pt_to_mft_to_file{$fqdn} = {};
+        }
         my $base_url = "http://$hostname/.well-known";
         my $index_url = "$base_url/erik/index/$fqdn";
         dprint("Submitting fetch for '$index_url'");
@@ -76,6 +86,7 @@ sub synchronise
         my ($type, $value) = @{$rmd}{qw(type value)};
         if ($type eq 'fqdn') {
             my $fqdn = $value;
+            my $pt_to_mft_to_file = $fqdn_to_pt_to_mft_to_file{$fqdn};
             if (not $res->is_success()) {
                 dprint("Unable to fetch index for '$fqdn'");
                 $ok = 0;
@@ -96,19 +107,33 @@ sub synchronise
                 for my $entry (@partition_list) {
                     my ($size, $hash) =
                         @{$entry}{qw(size hash)};
-                    dprint("Processing partition '$hash' with size '$size'");
-                    my $partition_url = hash_to_url($hostname, $hash);
-                    dprint("Submitting fetch for partition '$partition_url'");
+                    my $pt = "$hash-$size";
+                    if ($pt_to_mft_to_file->{$pt}) {
+                        dprint("Do not need to fetch partition ".
+                               "($hash, $size)");
+                        for my $mft (keys %{$pt_to_mft_to_file->{$pt}}) {
+                            for my $file (@{$pt_to_mft_to_file->{$pt}->{$mft}}) {
+                                $relevant_files{$file} = 1;
+                            }
+                        }
+                    } else {
+                        dprint("Processing partition '$hash' with size '$size'");
+                        my $partition_url = hash_to_url($hostname, $hash);
+                        dprint("Submitting fetch for partition '$partition_url'");
+                        my $mft_to_file = {};
+                        $pt_to_mft_to_file->{$pt} = $mft_to_file;
 
-                    my $id = $async->add(HTTP::Request->new(GET => $partition_url));
-                    $id_to_rmd{$id} = {
-                        type  => 'partition',
-                        value => [$fqdn, $hash, $size]
-                    };
+                        my $id = $async->add(HTTP::Request->new(GET => $partition_url));
+                        $id_to_rmd{$id} = {
+                            type  => 'partition',
+                            value => [$fqdn, $hash, $size,
+                                      $mft_to_file]
+                        };
+                    }
                 }
             }
         } elsif ($type eq 'partition') {
-            my ($fqdn, $hash, $size) = @{$value};
+            my ($fqdn, $hash, $size, $mft_to_file) = @{$value};
             my $partition_url = $res->request()->uri();
             if (not $res->is_success()) {
                 dprint("Unable to fetch partition for '$fqdn' ('$hash')");
@@ -128,6 +153,8 @@ sub synchronise
                                     locations aki)};
                     my @locs = sort @{$locations};
                     my $location = $locs[0];
+                    my @mft_files;
+                    $mft_to_file->{$location} = \@mft_files;
                     dprint("Processing manifest '$location' (number ".
                         "'$mftnum', size '$size')");
                     my $uri = URI->new($location);
@@ -135,6 +162,7 @@ sub synchronise
                     $path =~ s/^\///;
                     $path = $uri->host()."/$path";
                     $relevant_files{$path} = 1;
+                    push @mft_files, $path;
                     my ($pdir) = ($path =~ /^(.*)\//);
                     my ($file) = ($path =~ /^.*\/(.*)$/);
                     chdir $dir or die $!;
@@ -158,7 +186,7 @@ sub synchronise
                         my $id = $async->add(HTTP::Request->new(GET => $manifest_url));
                         $id_to_rmd{$id} = {
                             type  => 'manifest',
-                            value => [$fqdn, $entry, $path, $pdir]
+                            value => [$fqdn, $entry, $path, $pdir, \@mft_files]
                         };
                     } else {
                         dprint("Do not need to fetch manifest '$location'");
@@ -178,7 +206,7 @@ sub synchronise
                 }
             }
         } elsif ($type eq 'manifest') {
-            my ($fqdn, $entry, $path, $pdir) = @{$value};
+            my ($fqdn, $entry, $path, $pdir, $mft_files) = @{$value};
             my $manifest_url = $res->request()->uri();
             if (not $res->is_success()) {
                 dprint("Unable to fetch manifest for '$path'");
@@ -211,6 +239,7 @@ sub synchronise
                         $get = 1;
                     }
                     $relevant_files{$fpath} = 1;
+                    push @{$mft_files}, $fpath;
                     if ($get) {
                         my $o_url = hash_to_url($hostname, $hash);
                         dprint("Submitting fetch for file '$o_url'");
@@ -261,6 +290,10 @@ sub synchronise
             dprint("Removing '$empty_dir' (empty directory)");
             rmdir $empty_dir or die $!;
 	}
+
+        my $mp = "$dir/${fqdn}-metadata";
+        my $metadata = encode_json($fqdn_to_pt_to_mft_to_file{$fqdn});
+        write_file($mp, $metadata);
     }
 
     chdir $cwd;
