@@ -17,12 +17,13 @@ use MIME::Base64 qw(encode_base64url);
 
 sub new
 {
-    my ($class, $cache_dir, $httpd_dir) = @_;
+    my ($class, $cache_dir, $httpd_dir, %args) = @_;
 
     my $self = {
         cache_dir => $cache_dir,
         httpd_dir => $httpd_dir,
         openssl   => APNIC::RPKI::OpenSSL->new(),
+        %args
     };
     bless $self, $class;
     return $self;
@@ -59,6 +60,9 @@ sub synchronise
     my %written_files;
     my $file_count = scalar(@files);
     dprint("Updater file count: '$file_count'");
+
+    my $mpp = $self->{'mft_per_partition'} || 1;
+
     for my $file (@files) {
         dprint("Processing file '$file'");
         my ($fqdn) = ($file =~ /^(.*?)\//);
@@ -76,42 +80,38 @@ sub synchronise
 	    my $mdata = $openssl->verify_cms($file);
 	    my $manifest = APNIC::RPKI::Manifest->new();
 	    $manifest->decode($mdata);
-            
-            my $partition = APNIC::RPKI::Erik::Partition->new();
             my $tu = $manifest->this_update();
-            $partition->partition_time($tu);
             my $partition_hash = $digest_hexdata;
-            dprint("Partition manifest list hash is '$partition_hash'");
-            $partition->manifest_list([{
+            my %mldet = (
                 hash            => $partition_hash,
                 size            => ((stat($file))[7]),
                 aki             => "aki",
                 manifest_number => $manifest->manifest_number(),
                 this_update     => $tu,
                 locations       => [ "rsync://$file" ]
-            }]);
-            my $pcontent = $partition->encode();
+            );
 
-            my $pdigest = Digest::SHA->new(256);
-            $pdigest->add($pcontent);
-            my $pdigest_data = $pdigest->clone()->digest();
-            my $pdigest_hexdata = $pdigest->clone()->hexdigest();
-            my $ppath_segment = encode_base64url($pdigest_data);
-
-            my $new_path = "$httpd_dir/$ni_path/$ppath_segment";
-            $written_files{$new_path} = 1;
-            write_file($new_path, $pcontent);
-            dprint("Wrote new partition for manifest to '$new_path'");
-
-            write_file("/tmp/$ppath_segment", $pcontent);
-
-            my $index_partition_hash = $pdigest_hexdata;
-            dprint("Index partition hash is '$index_partition_hash'");
-            push @{$fqdn_to_pd{$fqdn}}, {
-                hash        => $index_partition_hash,
-                size        => length($pcontent),
-                this_update => $tu
-            };
+            my $partitions = $fqdn_to_pd{$fqdn};
+            if (@{$partitions}) {
+                my $partition = $partitions->[$#{$partitions}];
+                if (@{$partition->manifest_list()} >= $mpp) {
+                    my $partition = APNIC::RPKI::Erik::Partition->new();
+                    $partition->partition_time($tu);
+                    $partition->manifest_list([ \%mldet ]);
+                    push @{$partitions}, $partition;
+                } else {
+                    my $current_tu = $partition->partition_time();
+                    if ($tu > $current_tu) {
+                        $partition->partition_time($tu);
+                    }
+                    push @{$partition->manifest_list()}, \%mldet;
+                }
+            } else {
+                my $partition = APNIC::RPKI::Erik::Partition->new();
+                $partition->partition_time($tu);
+                $partition->manifest_list([ \%mldet ]);
+                push @{$partitions}, $partition;
+            }
         }
 
         my $new_path = "$httpd_dir/$ni_path/$path_segment";
@@ -126,7 +126,32 @@ sub synchronise
     }
 
     for my $fqdn (keys %fqdn_to_pd) {
-        my @pds = @{$fqdn_to_pd{$fqdn}};
+        my @partitions = @{$fqdn_to_pd{$fqdn}};
+        my @pds;
+        for my $partition (@partitions) {
+            my $pcontent = $partition->encode();
+
+            my $pdigest = Digest::SHA->new(256);
+            $pdigest->add($pcontent);
+            my $pdigest_data = $pdigest->clone()->digest();
+            my $pdigest_hexdata = $pdigest->clone()->hexdigest();
+            my $ppath_segment = encode_base64url($pdigest_data);
+
+            my $new_path = "$httpd_dir/$ni_path/$ppath_segment";
+            $written_files{$new_path} = 1;
+            write_file($new_path, $pcontent);
+            dprint("Wrote new partition for manifest to '$new_path'");
+
+            my $index_partition_hash = $pdigest_hexdata;
+            dprint("Index partition hash is '$index_partition_hash'");
+            my $tu = $partition->partition_time();
+            push @pds, {
+                hash        => $index_partition_hash,
+                size        => length($pcontent),
+                this_update => $partition->partition_time()
+            };
+        }
+
         my @tus = sort map { $_->{'this_update'} } @pds;
         my $latest_tu = $tus[$#tus];
         for my $pd (@pds) {

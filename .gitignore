@@ -13,3 +13,4 @@ t/key
 t/key.pub
 t/known-hosts
 nytprof
+nytprof.out
