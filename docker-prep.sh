@@ -27,6 +27,20 @@ apt-get install -y \
     libtls-dev \
     libdigest-sha-perl \
     libexpat1-dev \
+    libdevel-nytprof-perl \
+    libdevel-cover-perl \
+    libnet-ip-xs-perl \
+    libtest-most-perl \
+    libfile-slurp-perl \
+    libio-socket-ip-perl \
+    libio-socket-ssl-perl \
+    libtest-tcp-perl \
+    libnet-async-http-perl \
+    libtest-fatal-perl \
+    libnet-https-nb-perl \
+    libcgi-pm-perl \
+    libhttp-server-simple-perl \
+    libtest-http-server-simple-perl \
     sudo
 cpanm Set::IntSpan Net::CIDR::Set
 wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_0_2p/openssl-1.0.2p.tar.gz \

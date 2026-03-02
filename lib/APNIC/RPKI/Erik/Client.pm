@@ -10,6 +10,7 @@ use APNIC::RPKI::OpenSSL;
 use APNIC::RPKI::Utils qw(dprint);
 
 use Cwd qw(cwd);
+use Data::Dumper;
 use Digest::SHA;
 use File::Slurp qw(read_file write_file);
 use JSON::XS qw(encode_json decode_json);
@@ -88,7 +89,7 @@ sub synchronise
             my $fqdn = $value;
             my $pt_to_mft_to_file = $fqdn_to_pt_to_mft_to_file{$fqdn};
             if (not $res->is_success()) {
-                dprint("Unable to fetch index for '$fqdn'");
+                dprint("Unable to fetch index for '$fqdn': ".Dumper($res));
                 $ok = 0;
             } else {
                 dprint("Fetched index '$index_url'");
@@ -136,7 +137,8 @@ sub synchronise
             my ($fqdn, $hash, $size, $mft_to_file) = @{$value};
             my $partition_url = $res->request()->uri();
             if (not $res->is_success()) {
-                dprint("Unable to fetch partition for '$fqdn' ('$hash')");
+                dprint("Unable to fetch partition for '$fqdn' ('$hash'): ".
+                       Dumper($res));
                 $ok = 0;
             } else {
                 dprint("Fetched partition '$partition_url'");
@@ -209,7 +211,8 @@ sub synchronise
             my ($fqdn, $entry, $path, $pdir, $mft_files) = @{$value};
             my $manifest_url = $res->request()->uri();
             if (not $res->is_success()) {
-                dprint("Unable to fetch manifest for '$path'");
+                dprint("Unable to fetch manifest for '$path': ".
+                       Dumper($res));
                 $ok = 0;
             } else {
                 write_file($path, $res->decoded_content());
@@ -258,7 +261,8 @@ sub synchronise
             my ($fqdn, $fpath) = @{$value};
             my $object_url = $res->request()->uri();
             if (not $res->is_success()) {
-                dprint("Unable to fetch object for '$fpath'");
+                dprint("Unable to fetch object for '$fpath': ".
+                       Dumper($res));
                 $ok = 0;
             } else {
                 write_file($fpath, $res->decoded_content());

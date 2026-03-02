@@ -52,7 +52,11 @@ my $pid;
     chdir $cwd or die $!;
     my @differences = `diff -r $rtd $otd | grep -v rpki.roa.net-metadata`;
     ok((not @differences), "Synchronisation result matches original");
-    diag @differences;
+    if (@differences) {
+        diag "Server directory: $rtd";
+        diag "Client directory: $otd";
+        diag @differences;
+    }
 
     system("cp -r eg/repo2/61 $rtd/rpki.roa.net/rrdp/xTom/");
     eval {
@@ -73,7 +77,11 @@ my $pid;
     
     @differences = `diff -r $rtd $otd | grep -v rpki.roa.net-metadata`;
     ok((not @differences), "Resynchronisation result matches original");
-    diag @differences;
+    if (@differences) {
+        diag "Server directory: $rtd";
+        diag "Client directory: $otd";
+        diag @differences;
+    }
 
     system("rm -rf $rtd/rpki.roa.net/rrdp/xTom/61");
     eval {
@@ -94,7 +102,11 @@ my $pid;
     
     @differences = `diff -r $rtd $otd | grep -v rpki.roa.net-metadata`;
     ok((not @differences), "Resynchronisation result matches original");
-    diag @differences;
+    if (@differences) {
+        diag "Server directory: $rtd";
+        diag "Client directory: $otd";
+        diag @differences;
+    }
 }
 
 END {

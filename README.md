@@ -12,6 +12,10 @@ A proof-of-concept for the Erik synchronisation protocol.
 
     $ docker run -it apnic/rpki-erik-demo /bin/bash
 
+### Tests
+
+    $ docker run -it apnic/rpki-erik-demo make test
+
 ### Client
 
     $ mkdir /tmp/repo

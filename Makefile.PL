@@ -27,7 +27,7 @@ my $output = WriteMakefile(
                         'IO::Select'      => 0,
                         'IO::Socket::SSL' => 0,
                         'Net::EmptyPort'  => 0,
-                        'HTTP::Async'     => 0, }
+                        'HTTP::Async'      => 0, }
 );
 
 1;

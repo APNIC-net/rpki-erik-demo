@@ -11,6 +11,7 @@ use APNIC::RPKI::OpenSSL;
 
 use Cwd qw(cwd);
 use Digest::SHA;
+use File::Path qw(mkpath);
 use File::Slurp qw(read_file write_file);
 use MIME::Base64 qw(encode_base64url);
 
@@ -38,14 +39,14 @@ sub synchronise
     my $openssl   = $self->{'openssl'};
 
     my $ni_path = ".well-known/ni/sha-256";
-    my $res = system("mkdir -p $httpd_dir/$ni_path");
-    if ($res != 0) {
-        die "Unable to make NI directory";
+    eval { mkpath("$httpd_dir/$ni_path") };
+    if (my $error = $@) {
+        die "Unable to make NI directory: $error";
     }
     my $index_path = ".well-known/erik/index";
-    $res = system("mkdir -p $httpd_dir/$index_path");
-    if ($res != 0) {
-        die "Unable to make Erik index directory";
+    eval { mkpath("$httpd_dir/$index_path") };
+    if (my $error = $@) {
+        die "Unable to make Erik index directory: $error";
     }
 
     chdir $cache_dir or die $!;
@@ -115,11 +116,13 @@ sub synchronise
 
         my $new_path = "$httpd_dir/$ni_path/$path_segment";
         $written_files{$new_path} = 1;
-        my $res = system("cp $file $new_path");
-        if ($res != 0) {
-            die "Unable to copy $file into httpd directory";
+        # todo: these two operations should happen atomically.
+        unlink $new_path;
+        my $res = symlink("$cache_dir/$file", $new_path);
+        if (not $res) {
+            die "Unable to link $file into httpd directory: $!";
         }
-        dprint("Wrote file to '$new_path'");
+        dprint("Linked file to '$new_path'");
     }
 
     for my $fqdn (keys %fqdn_to_pd) {
