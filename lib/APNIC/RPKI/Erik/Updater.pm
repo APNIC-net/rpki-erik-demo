@@ -113,6 +113,15 @@ sub synchronise
 	    my $mdata = $openssl->verify_cms($file);
 	    my $manifest = APNIC::RPKI::Manifest->new();
 	    $manifest->decode($mdata);
+            push @{$manifest_detail}, $manifest;
+        }
+        # Sort manifest details, so that older (stabler) manifests are
+        # bundled together.
+        @manifest_details =
+            sort { $a->[2]->this_update() <=> $b->[2]->this_update() }
+                @manifest_details;
+        for my $manifest_detail (@manifest_details) {
+            my ($file, $hash, $manifest) = @{$manifest_detail};
             my $tu = $manifest->this_update();
             my %mldet = (
                 hash            => $hash,
