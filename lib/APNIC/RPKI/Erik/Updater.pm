@@ -62,7 +62,6 @@ sub synchronise
     my $file_count = scalar(@files);
     dprint("Updater file count: '$file_count'");
 
-    my $mpp = $self->{'mft_per_partition'} || 1;
     my @fqdn_to_manifests;
 
     for my $file (@files) {
@@ -95,8 +94,18 @@ sub synchronise
         dprint("Linked file to '$new_path'");
     }
 
+    my $mpp = $self->{'mft_per_partition'} || 1;
+    my $tp = $self->{'total_partitions'};
+
     for my $fqdn (keys %fqdn_to_pd) {
         my @manifest_details = @{$fqdn_to_manifests{$fqdn}};
+        my $mc = scalar @manifest_details;
+        if (defined $tp) {
+            $mpp = int(($mc / $tp) + 1);
+            dprint("Total partition count defined ($tp): ".
+                   "there are $mc manifests, so will use $mpp ".
+                   "manifests per partition");
+        }
         my @partitions = @{$fqdn_to_pd{$fqdn}};
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash) = @{$manifest_detail};
