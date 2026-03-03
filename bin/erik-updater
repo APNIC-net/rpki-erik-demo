@@ -13,6 +13,8 @@ sub usage
 Usage:
 $0 --cache-dir {cache-dir} --httpd-dir {httpd-dir}
    [--dir-count {dir-count} --char-count {char-count}]
+   [--mft-per-partition {mft-per-partition}]
+   [--total-partitions {total-partitions}]
 
 Writes Erik content to httpd-dir, based on the current state of
 cache-dir.
@@ -22,6 +24,10 @@ hierarchy for file storage.  Each file is stored has dir-count groups
 of char-count characters removed from its front, with each group
 forming another directory in the hierarchy.  By default, both values
 are zero (i.e. all files are stored in a single directory).
+
+The mft-per-partition value specifies the number of manifests that
+will be stored in each partition (defaults to 1).  Alternatively, the
+total number of partitions to be written may be specified instead.
 EOF
 
     exit(10);
@@ -30,6 +36,7 @@ EOF
 my %options;
 GetOptions(\%options, 'cache-dir=s', 'httpd-dir=s',
                       'dir-count=i', 'char-count=i');
+                      'mft-per-partition=i', 'total-partitions=i');
 if (not $options{'cache-dir'}) {
     print "Please provide a cache directory.\n";
     usage();
@@ -43,12 +50,16 @@ my $cache_dir  = $options{'cache-dir'};
 my $httpd_dir  = $options{'httpd-dir'};
 my $dir_count  = $options{'dir-count'} || 0;
 my $char_count = $options{'char-count'} || 0;
+my $mft_per_partition = $options{'mft-per-partition'};
+my $total_partitions  = $options{'total-partitions'};
 
 my $updater =
     APNIC::RPKI::Erik::Updater->new(
         $cache_dir, $httpd_dir,
         dir_count  => $dir_count,
-        char_count => $char_count
+        char_count => $char_count,
+        mft_per_partition => $mft_per_partition,
+        total_partitions  => $total_partitions,
     );
 $updater->synchronise();
 
