@@ -15,7 +15,7 @@ $0 --cache-dir {cache-dir} --httpd-dir {httpd-dir}
    [--dir-count {dir-count} --char-count {char-count}]
    [--mft-per-partition {mft-per-partition}]
    [--total-partitions {total-partitions}]
-   --write-snapshots
+   --write-snapshots --write-ttqs
 
 Writes Erik content to httpd-dir, based on the current state of
 cache-dir.
@@ -38,7 +38,7 @@ my %options;
 GetOptions(\%options, 'cache-dir=s', 'httpd-dir=s',
                       'dir-count=i', 'char-count=i');
                       'mft-per-partition=i', 'total-partitions=i',
-                      'write-snapshots');
+                      'write-snapshots', 'write-ttqs');
 if (not $options{'cache-dir'}) {
     print "Please provide a cache directory.\n";
     usage();
@@ -55,6 +55,7 @@ my $char_count = $options{'char-count'} || 0;
 my $mft_per_partition = $options{'mft-per-partition'};
 my $total_partitions  = $options{'total-partitions'};
 my $write_snapshots   = exists $options{'write-snapshots'} ? 1 : 0;
+my $write_ttqs        = exists $options{'write-ttqs'} ? 1 : 0;
 
 my $updater =
     APNIC::RPKI::Erik::Updater->new(
@@ -64,6 +65,7 @@ my $updater =
         mft_per_partition => $mft_per_partition,
         total_partitions  => $total_partitions,
         write_snapshots   => $write_snapshots,
+        write_ttqs        => $write_ttqs,
     );
 $updater->synchronise();
 

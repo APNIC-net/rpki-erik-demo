@@ -76,22 +76,42 @@ sub synchronise
     my @local_responses;
     my $lid = 1;
 
-    my $ler_file_count;
-    my $ler_file_reliance;
+    my $ler_file_count = 0;
+    my $ler_file_reliance = 0;
 
     my $ler = "$dir/local-erik-relay";
-    if ($self->{"use_snapshots"}) {
+    if ($self->{"use_snapshots"} or $self->{"use_ttqs"}) {
         mkdir $ler;
     }
 
     for my $fqdn (@{$fqdns}) {
         dprint("Requesting index for '$fqdn'");
         my $mp = "$dir/${fqdn}-metadata";
-        my $used_snapshot = 0;
+        my $used_prefetch = 0;
         if (-e $mp) {
             my $content = read_file($mp);
             my $data = decode_json($content);
             $fqdn_to_pt_to_mft_to_file{$fqdn} = $data;
+            if ($self->{'use_ttqs'}) {
+                my $now = time();
+                my $last_run = (stat($mp))[9];
+                my $diff = $now - $last_run;
+                my $ttq_filename;
+                if ($diff >= 300) {
+                    $ttq_filename = "5min";
+                } else {
+                    $ttq_filename = "10min";
+                }
+                my $base_url = "http://$hostname/.well-known";
+                my $ttq_url = "$base_url/erik/tail/$fqdn/$ttq_filename";
+                dprint("Submitting fetch for '$ttq_url'");
+                my $id = $async->add(HTTP::Request->new(GET => $ttq_url));
+                $id_to_rmd{$id} = {
+                    type  => 'prefetch',
+                    value => $fqdn
+                };
+                $used_prefetch = 1;
+            }
         } else {
             $fqdn_to_pt_to_mft_to_file{$fqdn} = {};
             if ($self->{'use_snapshots'}) {
@@ -100,13 +120,13 @@ sub synchronise
                 dprint("Submitting fetch for '$snapshot_url'");
                 my $id = $async->add(HTTP::Request->new(GET => $snapshot_url));
                 $id_to_rmd{$id} = {
-                    type  => 'snapshot',
+                    type  => 'prefetch',
                     value => $fqdn
                 };
-                $used_snapshot = 1;
+                $used_prefetch = 1;
             }
         }
-        if (not $used_snapshot) {
+        if (not $used_prefetch) {
             my $base_url = "http://$hostname/.well-known";
             my $index_url = "$base_url/erik/index/$fqdn";
             dprint("Submitting fetch for '$index_url'");
@@ -124,10 +144,10 @@ sub synchronise
         my $rmd = $id_to_rmd{$id};
         my $index_url = $res->request()->uri();
         my ($type, $value) = @{$rmd}{qw(type value)};
-        if ($type eq 'snapshot') {
+        if ($type eq 'prefetch') {
             my $fqdn = $value;
             if (not $res->is_success()) {
-                dprint("Unable to fetch snapshot for '$fqdn': ".Dumper($res));
+                dprint("Unable to fetch snapshot/TTQ for '$fqdn': ".Dumper($res));
             } else {
                 $fqdn_to_ler{$fqdn} = 1;
                 eval {
@@ -155,12 +175,12 @@ sub synchronise
                         my $lb = unpack('C', $tlb);
                         my $new_object;
                         if ($lb <= 127) {
-                            dprint("Got short object in snapshot ($lb bytes)");
+                            dprint("Got short object in snapshot/TTQ ($lb bytes)");
                             $new_object = $rfb.$tlb.substr($content, 2, $lb);
                             $content = substr($content, 2 + $lb);
                         } else {
                             my $elb = $lb & 127;
-                            dprint("Got object in snapshot ($elb extra ".
+                            dprint("Got object in snapshot/TTQ ($elb extra ".
                                    "length bytes)");
                             my $raw_rlb = substr($content, 2, $elb);
                             my @rlb = unpack('C*', $raw_rlb);
@@ -172,7 +192,7 @@ sub synchronise
                                 dprint("Increment $i: $inc");
                                 $new_length += $inc;
                             }
-                            dprint("Got object in snapshot ($new_length ".
+                            dprint("Got object in snapshot/TTQ ($new_length ".
                                    "bytes)");
                             $new_object = $rfb.$tlb.$raw_rlb.substr($content, 2 + $elb, $new_length);
                             $content = substr($content, 2 + $elb + $new_length);
@@ -188,7 +208,7 @@ sub synchronise
                     }
                 };
                 if (my $error = $@) {
-                    die "Unable to process snapshot for '$fqdn': $error";
+                    die "Unable to process snapshot/TTQ for '$fqdn': $error";
                 }
             }
             my $base_url = "http://$hostname/.well-known";

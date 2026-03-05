@@ -74,6 +74,14 @@ sub write_rpki_file
         write_file($new_path, $content);
     }
     dprint("Linked file to '$new_path'");
+
+    if ($source_path) {
+        my @stat = stat($source_path);
+        my $atime = $stat[8];
+        my $mtime = $stat[9];
+        utime($atime, $mtime, $new_path);
+    }
+
     chdir $dir;
 
     return $new_path;
@@ -272,6 +280,39 @@ sub synchronise
             $z->flush() or die $!;
             $written_files{$new_output_path} = 1;
             dprint("Wrote snapshot ($new_output_path)");
+        }
+    }
+
+    if ($self->{'write_ttqs'}) {
+        for my $fqdn (keys %fqdn_to_path) {
+            mkpath("$httpd_dir/.well-known/erik/tail");
+            for my $det ([300, "5min"],
+                         [600, "10min"]) {
+                my ($s, $file) = @{$det};
+                mkpath("$httpd_dir/.well-known/erik/tail/$fqdn");
+                my $new_output_path =
+                    "$httpd_dir/.well-known/erik/tail/$fqdn/$file";
+                my $z = IO::Compress::Gzip->new(
+                    $new_output_path
+                ) or die $!;
+                my $now = time();
+                my $threshold = $now - $s;
+                for my $path (@{$fqdn_to_path{$fqdn}}) {
+                    my $mtime = (stat($path))[9];
+                    if ($mtime > $threshold) {
+                        open my $fh, "<", $path or die $!;
+                        binmode($fh);
+                        my $buffer;
+                        my $bytes;
+                        while ($bytes = read($fh, $buffer, 1024)) {
+                            $z->syswrite($buffer) or die $!;
+                        }
+                    }
+                }
+                $z->flush() or die $!;
+                $written_files{$new_output_path} = 1;
+                dprint("Wrote TTQ ($new_output_path)");
+            }
         }
     }
 
