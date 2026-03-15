@@ -147,18 +147,10 @@ sub synchronise
         $written_files{$new_path} = 1;
     }
 
-    my $mpp = $self->{'mft_per_partition'} || 1;
-    my $tp = $self->{'total_partitions'};
-
     for my $fqdn (keys %fqdn_to_manifests) {
         my @manifest_details = @{$fqdn_to_manifests{$fqdn}};
         my $mc = scalar @manifest_details;
-        if (defined $tp) {
-            $mpp = int(($mc / $tp) + 1);
-            dprint("Total partition count defined ($tp): ".
-                   "there are $mc manifests, so will use $mpp ".
-                   "manifests per partition");
-        }
+
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash) = @{$manifest_detail};
 
@@ -166,49 +158,45 @@ sub synchronise
             my $manifest = APNIC::RPKI::Manifest->new();
             $manifest->decode($mdata);
             push @{$manifest_detail}, $manifest;
+
+            my $ee_cert = $openssl->get_ee_cert($file);
+            my $aki = $openssl->get_aki($ee_cert);
+            push @{$manifest_detail}, $aki;
         }
-        # Sort manifest details, so that older (stabler) manifests are
-        # bundled together.
-        @manifest_details =
-            sort { $a->[2]->this_update() <=> $b->[2]->this_update() }
-                @manifest_details;
-        my @partitions;
+
+        my %partitions;
         for my $manifest_detail (@manifest_details) {
-            my ($file, $hash, $manifest) = @{$manifest_detail};
+            my ($file, $hash, $manifest, $aki) = @{$manifest_detail};
+
             my $tu = $manifest->this_update();
             my %mldet = (
                 hash            => $hash,
                 size            => ((stat($file))[7]),
-                aki             => "aki",
+                aki             => $aki,
                 manifest_number => $manifest->manifest_number(),
                 this_update     => $tu,
                 locations       => [ "rsync://$file" ]
             );
 
-            if (@partitions) {
-                my $partition = $partitions[$#partitions];
-                if (@{$partition->manifest_list()} >= $mpp) {
-                    my $partition = APNIC::RPKI::Erik::Partition->new();
-                    $partition->partition_time($tu);
-                    $partition->manifest_list([ \%mldet ]);
-                    push @partitions, $partition;
-                } else {
-                    my $current_tu = $partition->partition_time();
-                    if ($tu > $current_tu) {
-                        $partition->partition_time($tu);
-                    }
-                    push @{$partition->manifest_list()}, \%mldet;
-                }
-            } else {
+            my @aki_bytes = split //, $aki;
+            my $first_byte = $aki_bytes[0];
+            my $partition = $partitions{$first_byte};
+            if (not $partition) {
                 my $partition = APNIC::RPKI::Erik::Partition->new();
                 $partition->partition_time($tu);
                 $partition->manifest_list([ \%mldet ]);
-                push @partitions, $partition;
+                $partitions{$first_byte} = $partition;
+            } else {
+                my $current_tu = $partition->partition_time();
+                if ($tu > $current_tu) {
+                    $partition->partition_time($tu);
+                }
+                push @{$partition->manifest_list()}, \%mldet;
             }
         }
 
         my @pds;
-        for my $partition (@partitions) {
+        for my $partition (values %partitions) {
             my $pcontent = $partition->encode();
 
             my $pdigest = Digest::SHA->new(256);

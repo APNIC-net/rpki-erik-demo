@@ -249,4 +249,26 @@ sub get_public_key
     return \@lines;
 }
 
+sub get_aki
+{
+    my ($self, $cert) = @_;
+
+    my $ft_cert = File::Temp->new();
+    print $ft_cert $cert;
+    $ft_cert->flush();
+    my $fn_cert = $ft_cert->filename();
+
+    my $openssl = $self->get_openssl_path();
+    my $cmd_str = "$openssl x509 -in $fn_cert ".
+                  "-noout -text | grep -A1 'Authority Key'";
+    my @lines = `$cmd_str`;
+    chomp for @lines;
+    my $aki = $lines[1];
+    $aki =~ s/^\s*//;
+    $aki =~ s/\s*$//;
+    $aki =~ s/://g;
+    my $aki_bytes = pack('H*', $aki);
+    return $aki_bytes;
+}
+
 1;
