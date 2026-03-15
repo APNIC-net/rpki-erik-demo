@@ -46,6 +46,10 @@ A proof-of-concept for the Erik synchronisation protocol.
 When the environment variable `APNIC_DEBUG` is set, debug messages
 will be printed to standard error.
 
+For profiling:
+
+    docker run -v ./nytprof:/root/rpki-erik-demo/nytprof -it apnic/rpki-erik-demo sh -c "perl -d:NYTProf -Mblib t/20-client-sync.t && nytprofhtml"
+
 ### License
 
 See [LICENSE](./LICENSE).
