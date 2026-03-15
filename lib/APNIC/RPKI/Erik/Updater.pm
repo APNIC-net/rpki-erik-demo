@@ -114,7 +114,6 @@ sub synchronise
         chomp;
         s/^\.\///;
     }
-    my %fqdn_to_pd;
     my %fqdn_to_manifests;
     my %fqdn_to_path;
     my %written_files;
@@ -126,7 +125,6 @@ sub synchronise
     for my $file (@files) {
         dprint("Processing file '$file'");
         my ($fqdn) = ($file =~ /^(.*?)\//);
-        $fqdn_to_pd{$fqdn} ||= [];
         $fqdn_to_manifests{$fqdn} ||= [];
         my ($ext) = ($file =~ /\.([a-z]*)$/);
 
@@ -152,7 +150,7 @@ sub synchronise
     my $mpp = $self->{'mft_per_partition'} || 1;
     my $tp = $self->{'total_partitions'};
 
-    for my $fqdn (keys %fqdn_to_pd) {
+    for my $fqdn (keys %fqdn_to_manifests) {
         my @manifest_details = @{$fqdn_to_manifests{$fqdn}};
         my $mc = scalar @manifest_details;
         if (defined $tp) {
@@ -161,13 +159,12 @@ sub synchronise
                    "there are $mc manifests, so will use $mpp ".
                    "manifests per partition");
         }
-        my @partitions = @{$fqdn_to_pd{$fqdn}};
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash) = @{$manifest_detail};
 
-	    my $mdata = $openssl->verify_cms($file);
-	    my $manifest = APNIC::RPKI::Manifest->new();
-	    $manifest->decode($mdata);
+            my $mdata = $openssl->verify_cms($file);
+            my $manifest = APNIC::RPKI::Manifest->new();
+            $manifest->decode($mdata);
             push @{$manifest_detail}, $manifest;
         }
         # Sort manifest details, so that older (stabler) manifests are
@@ -175,6 +172,7 @@ sub synchronise
         @manifest_details =
             sort { $a->[2]->this_update() <=> $b->[2]->this_update() }
                 @manifest_details;
+        my @partitions;
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash, $manifest) = @{$manifest_detail};
             my $tu = $manifest->this_update();
