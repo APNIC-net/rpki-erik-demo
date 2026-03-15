@@ -80,7 +80,9 @@ sub synchronise
     my $ler_file_reliance = 0;
 
     my $ler = "$dir/local-erik-relay";
-    if ($self->{"use_snapshots"} or $self->{"use_ttqs"}) {
+    my $use_snapshots = $self->{"use_snapshots"};
+    my $use_ttqs      = $self->{"use_ttqs"};
+    if ($use_snapshots or $use_ttqs) {
         mkdir $ler;
     }
 
@@ -88,11 +90,11 @@ sub synchronise
         dprint("Requesting index for '$fqdn'");
         my $mp = "$dir/${fqdn}-metadata";
         my $used_prefetch = 0;
-        if (-e $mp) {
+        if (-e $mp and not $use_snapshots) {
             my $content = read_file($mp);
             my $data = decode_json($content);
             $fqdn_to_pt_to_mft_to_file{$fqdn} = $data;
-            if ($self->{'use_ttqs'}) {
+            if ($use_ttqs) {
                 my $now = time();
                 my $last_run = (stat($mp))[9];
                 my $diff = $now - $last_run;
@@ -114,7 +116,7 @@ sub synchronise
             }
         } else {
             $fqdn_to_pt_to_mft_to_file{$fqdn} = {};
-            if ($self->{'use_snapshots'}) {
+            if ($use_snapshots) {
                 my $base_url = "http://$hostname/.well-known";
                 my $snapshot_url = "$base_url/erik/snapshot/$fqdn";
                 dprint("Submitting fetch for '$snapshot_url'");

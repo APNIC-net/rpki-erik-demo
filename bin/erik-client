@@ -16,6 +16,9 @@ $0 --cache-dir {cache-dir} --server {host[:port]} --fqdn {fqdn}
 
 Synchronises the local cache against the specified server for the
 specified RPKI repository FQDN.
+
+If --use-snapshots is set, then this will reinitialise the local state
+based on the snapshot.
 EOF
 
     exit(10);
