@@ -125,11 +125,11 @@ sub synchronise
     my @fqdn_to_manifests;
 
     for my $file (@files) {
-        dprint("Processing file '$file'");
         my ($fqdn) = ($file =~ /^(.*?)\//);
         if ($fqdn_to_sync and ($fqdn ne $fqdn_to_sync)) {
             next;
         }
+        dprint("Processing file '$file'");
         $fqdn_to_manifests{$fqdn} ||= [];
         my ($ext) = ($file =~ /\.([a-z]*)$/);
 
