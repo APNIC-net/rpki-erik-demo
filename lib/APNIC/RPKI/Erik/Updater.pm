@@ -98,14 +98,16 @@ sub synchronise
     my $openssl   = $self->{'openssl'};
 
     my $ni_path = ".well-known/ni/sha-256";
-    eval { mkpath("$httpd_dir/$ni_path") };
-    if (my $error = $@) {
-        die "Unable to make NI directory: $error";
-    }
     my $index_path = ".well-known/erik/index";
-    eval { mkpath("$httpd_dir/$index_path") };
-    if (my $error = $@) {
-        die "Unable to make Erik index directory: $error";
+    if (not $fqdn_to_sync) {
+        eval { mkpath("$httpd_dir/$ni_path") };
+        if (my $error = $@) {
+            die "Unable to make NI directory: $error";
+        }
+        eval { mkpath("$httpd_dir/$index_path") };
+        if (my $error = $@) {
+            die "Unable to make Erik index directory: $error";
+        }
     }
 
     dprint("Cache directory is '$cache_dir'");
@@ -146,11 +148,13 @@ sub synchronise
                  [$file, $digest_hexdata];
         }
 
-        my $new_path =
-            $self->write_rpki_file("$cache_dir/$file",
-                                   $path_segment);
-        push @{$fqdn_to_path{$fqdn}}, $new_path;
-        $written_files{$new_path} = 1;
+        if (not $fqdn_to_sync) {
+            my $new_path =
+                $self->write_rpki_file("$cache_dir/$file",
+                                    $path_segment);
+            push @{$fqdn_to_path{$fqdn}}, $new_path;
+            $written_files{$new_path} = 1;
+        }
     }
 
     for my $fqdn (keys %fqdn_to_manifests) {
@@ -216,11 +220,13 @@ sub synchronise
             my $pdigest_hexdata = $pdigest->clone()->hexdigest();
             my $ppath_segment = encode_base64url($pdigest_data);
 
-            my $new_path = $self->write_rpki_file(
-                undef, $ppath_segment, $pcontent
-            );
-            $written_files{$new_path} = 1;
-            dprint("Wrote new partition for manifest to '$new_path'");
+            if (not $fqdn_to_sync) {
+                my $new_path = $self->write_rpki_file(
+                    undef, $ppath_segment, $pcontent
+                );
+                $written_files{$new_path} = 1;
+                dprint("Wrote new partition for manifest to '$new_path'");
+            }
 
             my $index_partition_hash = $pdigest_hexdata;
             dprint("Index partition hash is '$index_partition_hash'");
@@ -253,11 +259,19 @@ sub synchronise
         $index->partition_list(\@pds);
         my $icontent = $index->encode();
 
-        my $new_path = "$httpd_dir/$index_path/$fqdn";
-        $written_files{$new_path} = 1;
-        write_file($new_path, $icontent);
+        if (not $fqdn_to_sync) {
+            my $new_path = "$httpd_dir/$index_path/$fqdn";
+            $written_files{$new_path} = 1;
+            write_file($new_path, $icontent);
+        }
 
         $fqdn_to_pt_to_mft_to_file{$fqdn} = \%pt_to_mft_to_file;
+    }
+
+    if ($fqdn_to_sync) {
+        my @files = `find $httpd_dir -type f`;
+        dprint("Syncing single FQDN: wrote ".(scalar @files)." files");
+        return $fqdn_to_pt_to_mft_to_file{$fqdn_to_sync};
     }
 
     my $dir_count = $self->{'dir_count'} || 0;
