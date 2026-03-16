@@ -42,5 +42,8 @@ apt-get install -y \
     libhttp-server-simple-perl \
     libtest-http-server-simple-perl \
     openssl \
+    libio-async-perl \
+    libfuture-asyncawait-perl \
+    libnet-async-http-perl \
     sudo
 cpanm Set::IntSpan Net::CIDR::Set

@@ -41,17 +41,17 @@ sub run
     my ($self) = @_;
 
     my $d = $self->{"d"};
-    while (my $c = $d->accept()) {
+    CONN: while (my $c = $d->accept()) {
         while (my $r = $c->get_request()) {
+            my $method = $r->method();
+            my $path = $r->uri()->path();
+            dprint("Received request: '$method' '$path'");
+
             chdir $self->{"httpd_dir"} or die $!;
             my $metadata = read_file(".well-known/erik/metadata");
             my $md = decode_json($metadata);
             my $cc = $md->{'char_count'};
             my $dc = $md->{'dir_count'};
-
-            my $method = $r->method();
-            my $path = $r->uri()->path();
-            dprint("Received request: '$method' '$path'");
             $path =~ s/^\///;
 
             my ($remaining_fn) = ($path =~ /^.well-known\/ni\/sha-256\/(.*)$/);
@@ -68,18 +68,25 @@ sub run
                 $path = "$current_dir/$remaining_fn";
             }
 
-            my $res;
+            my $ok = 0;
             eval {
                 if ($method eq 'GET') {
-                    $c->send_file_response($path); 
+                    $c->send_file_response($path);
+                    dprint("Sent response: '$method' '$path'");
+                    $ok = 1;
                 }
             };
+            my $res;
             if (my $error = $@) {
                 warn $error;
                 $res = HTTP::Response->new(HTTP_INTERNAL_SERVER_ERROR);
-            } elsif (not $res) {
+            } elsif (not $ok) {
                 $res = HTTP::Response->new(HTTP_NOT_FOUND);
+            } else {
+                next;
             }
+            dprint("Sent error response: '$method' '$path': ".
+                   $res->code());
             $c->send_response($res);
         }
     }
