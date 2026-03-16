@@ -47,3 +47,6 @@ apt-get install -y \
     libnet-async-http-perl \
     sudo
 cpanm Set::IntSpan Net::CIDR::Set
+git clone https://github.com/job/rpkitouch
+cd rpkitouch
+make && mkdir -p /usr/local/man/man8 && make install
