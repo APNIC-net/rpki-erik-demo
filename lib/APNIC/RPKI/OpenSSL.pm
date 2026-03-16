@@ -267,8 +267,7 @@ sub get_aki
     $aki =~ s/^\s*//;
     $aki =~ s/\s*$//;
     $aki =~ s/://g;
-    my $aki_bytes = pack('H*', $aki);
-    return $aki_bytes;
+    return lc($aki);
 }
 
 1;
