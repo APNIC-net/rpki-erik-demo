@@ -88,7 +88,6 @@ sub synchronise
     my %relevant_files;
     my %fqdn_to_pt_to_mft_to_file;
     my %fqdn_to_ler;
-    my @partition_ret_data;
     my @local_responses;
     my $local_id = 1;
     my @remote_responses;
@@ -123,7 +122,6 @@ sub synchronise
                 );
             my ($fpmf, $prd) = $updater->synchronise($fqdn);
             $fqdn_to_pt_to_mft_to_file{$fqdn} = $fpmf;
-            @partition_ret_data = @{$prd};
             dprint("Generated partition data for '$fqdn' for synchronising");
             if ($use_ttqs) {
                 my $now = time();
@@ -405,7 +403,6 @@ sub synchronise
                         dprint("Decoded partition '$partition_url'");
 
                         my @manifest_list = @{$partition->manifest_list()};
-                        my $any_get = 0;
                         for my $entry (@manifest_list) {
                             my ($mftnum, $size, $this_update, $hash, $locations, $aki) =
                                 @{$entry}{qw(manifest_number size this_update hash
@@ -433,11 +430,9 @@ sub synchronise
                                 my $content = lc $digest->hexdigest();
                                 if ($content ne $hash) {
                                     $get = 1;
-                                    $any_get = 1;
                                 }
                             } else {
                                 $get = 1;
-                                $any_get = 1;
                             }
                             if ($get) {
                                 my $handled = 0;
@@ -499,23 +494,6 @@ sub synchronise
                                     my $fpath = "$pdir/$filename";
                                     $relevant_files{$fpath} = 1;
                                 }
-                            }
-                        }
-                        if (not $any_get) {
-                            dprint("Fetched partition, but already had all manifests");
-                            dprint("Remote partition JSON: ".$partition->to_json());
-                            my $pcontent = $res->content();
-                            my $pdigest = Digest::SHA->new(256);
-                            $pdigest->add($pcontent);
-                            my $pdigest_hexdata = $pdigest->clone()->hexdigest();
-                            my $size = length($pcontent);
-                            dprint("Remote partition hash: $pdigest_hexdata");
-                            dprint("Remote partition size: $size");
-                            for my $prd (@partition_ret_data) {
-                                my ($p, $h, $s) = @{$prd};
-                                dprint("Local partition JSON: ".$p->to_json());
-                                dprint("Local partition hash: $h");
-                                dprint("Local partition size: $s");
                             }
                         }
                     }
