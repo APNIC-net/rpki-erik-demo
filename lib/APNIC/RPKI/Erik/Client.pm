@@ -69,6 +69,8 @@ sub synchronise
     my $ua      = $self->{'ua'};
     my $dir     = $self->{'dir'};
     my $openssl = $self->{'openssl'};
+    my $out_dir = $self->{'out_dir'} || $dir;
+    my $gc      = $self->{'out_dir'} ? 0 : 1;
 
     my $cwd = cwd();
 
@@ -418,7 +420,7 @@ sub synchronise
                             push @mft_files, $path;
                             my ($pdir) = ($path =~ /^(.*)\//);
                             my ($file) = ($path =~ /^.*\/(.*)$/);
-                            chdir $dir or die $!;
+                            chdir $out_dir or die $!;
                             system("mkdir -p $pdir");
                             my $get = 0;
                             if (-e $path) {
@@ -484,6 +486,7 @@ sub synchronise
                             } else {
                                 dprint("Do not need to fetch manifest '$location'");
 
+                                chdir $dir or die $!;
                                 my $mdata = $openssl->verify_cms($path);
                                 my $manifest = APNIC::RPKI::Manifest->new();
                                 $manifest->decode($mdata);
@@ -523,6 +526,7 @@ sub synchronise
                             Dumper($res));
                         $ok = 0;
                     } else {
+                        chdir $dir or die $!;
                         if (-e $path) {
                             my $cmft = APNIC::RPKI::Manifest->new();
                             my $cmft_data = $openssl->verify_cms($path);
@@ -545,6 +549,7 @@ sub synchronise
                                 next;
                             }
                         }
+                        chdir $out_dir or die $!;
                         write_file($path, $res->decoded_content());
                         dprint("Fetched manifest '$manifest_url'");
                         dprint("Wrote manifest to path '$path'");
@@ -555,6 +560,7 @@ sub synchronise
                         my @files = @{$manifest->files() || []};
                         my $file_count = scalar @files;
                         dprint("Manifest file count: '$file_count'");
+                        chdir $dir or die $!;
                         for my $file (@files) {
                             my $filename = $file->{'filename'};
                             dprint("Processing file '$filename'");
@@ -633,6 +639,7 @@ sub synchronise
                             Dumper($res));
                         $ok = 0;
                     } else {
+                        chdir $out_dir or die $!;
                         write_file($fpath, $res->decoded_content());
                         dprint("Fetched file '$object_url'");
                         dprint("Wrote file to path '$fpath'");
@@ -664,23 +671,25 @@ sub synchronise
         return;
     }
 
-    for my $fqdn (@{$fqdns}) {
-        chdir $dir or die $!;
-        my @files = `find $fqdn -type f`;
-        for my $file (@files) {
-            chomp $file;
-            $file =~ s/^\.\///;
-            if (not $relevant_files{$file}) {
-                dprint("Removing '$file' (deleted)");
-                unlink $file or die $!;
+    if ($gc) {
+        for my $fqdn (@{$fqdns}) {
+            chdir $dir or die $!;
+            my @files = `find $fqdn -type f`;
+            for my $file (@files) {
+                chomp $file;
+                $file =~ s/^\.\///;
+                if (not $relevant_files{$file}) {
+                    dprint("Removing '$file' (deleted)");
+                    unlink $file or die $!;
+                }
             }
-        }
 
-        my @empty_dirs = `find $fqdn -type d -empty`;
-        for my $empty_dir (@empty_dirs) {
-            chomp $empty_dir;
-            dprint("Removing '$empty_dir' (empty directory)");
-            rmdir $empty_dir or die $!;
+            my @empty_dirs = `find $fqdn -type d -empty`;
+            for my $empty_dir (@empty_dirs) {
+                chomp $empty_dir;
+                dprint("Removing '$empty_dir' (empty directory)");
+                rmdir $empty_dir or die $!;
+            }
         }
     }
 
