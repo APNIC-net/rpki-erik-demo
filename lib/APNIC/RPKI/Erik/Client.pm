@@ -523,6 +523,28 @@ sub synchronise
                             Dumper($res));
                         $ok = 0;
                     } else {
+                        if (-e $path) {
+                            my $cmft = APNIC::RPKI::Manifest->new();
+                            my $cmft_data = $openssl->verify_cms($path);
+                            $cmft->decode($cmft_data);
+                            my $nmft = APNIC::RPKI::Manifest->new();
+                            my $ft = File::Temp->new();
+                            my $fn = $ft->filename();
+                            write_file($fn, $res->decoded_content());
+                            my $nmft_data = $openssl->verify_cms($fn);
+                            $nmft->decode($nmft_data);
+                            if ($nmft->manifest_number() < $cmft->manifest_number()) {
+                                dprint("Remote manifest is different, ".
+                                       "but has smaller manifest ".
+                                       "number, skipping");
+                                next;
+                            } elsif ($nmft->this_update() < $cmft->this_update()) {
+                                dprint("Remote manifest is different, ".
+                                       "but has older thisUpdate, ".
+                                       "skipping");
+                                next;
+                            }
+                        }
                         write_file($path, $res->decoded_content());
                         dprint("Fetched manifest '$manifest_url'");
                         dprint("Wrote manifest to path '$path'");
