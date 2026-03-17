@@ -222,7 +222,7 @@ sub synchronise
                 if ($id =~ /^remote_/) {
                     $received++;
                 }
-                my $rmd = $id_to_rmd{$id};
+                my $rmd = delete $id_to_rmd{$id};
                 my $index_url = $res->request()->uri();
                 my ($type, $value) = @{$rmd}{qw(type value)};
                 if ($type eq 'prefetch') {
