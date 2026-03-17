@@ -13,6 +13,7 @@ use APNIC::RPKI::Utils qw(dprint);
 use Cwd qw(cwd);
 use Data::Dumper;
 use Digest::SHA;
+use File::Path qw(mkpath);
 use File::Slurp qw(read_file write_file);
 use File::Temp qw(tempdir);
 use IO::Async::Loop;
@@ -419,7 +420,7 @@ sub synchronise
                             }
                             my ($pdir) = ($path =~ /^(.*)\//);
                             my ($file) = ($path =~ /^.*\/(.*)$/);
-                            system("mkdir -p $out_dir/$pdir");
+                            mkpath("$out_dir/$pdir");
                             my $get = 0;
                             if (-e $path) {
                                 my $digest = Digest::SHA->new(256);
@@ -539,8 +540,8 @@ sub synchronise
                         if ($res->code() == 204) {
                             my $rpath = $res->request()->uri()->as_string();
                             $rpath =~ s/^file:\/\///;
-                            my $ress = system("mv $rpath $path");
-                            if ($ress != 0) {
+                            my $ress = rename($rpath, $path);
+                            if (not $ress) {
                                 die "Unable to move file: $!";
                             }
                         } else {
@@ -638,8 +639,8 @@ sub synchronise
                         if ($res->code() == 204) {
                             my $rpath = $res->request()->uri()->as_string();
                             $rpath =~ s/^file:\/\///;
-                            my $ress = system("mv $rpath $fpath");
-                            if ($ress != 0) {
+                            my $ress = rename($rpath, $fpath);
+                            if (not $ress) {
                                 die "Unable to move file: $!";
                             }
                         } else {

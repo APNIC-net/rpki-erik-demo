@@ -41,21 +41,25 @@ APNIC::RPKI::Manifest->mk_accessors(qw(
 
 our $VERSION = "0.01";
 
+my $parser;
+
 sub new
 {
     my ($class) = @_;
 
-    my $parser = Convert::ASN1->new();
-    $parser->configure(
-        encoding => "DER",
-        encode   => { time => "utctime" },
-        decode   => { time => "utctime" }
-    );
-    my $res = $parser->prepare(MANIFEST_ASN1());
-    if (not $res) {
-        die $parser->error();
+    if (not $parser) {
+        $parser = Convert::ASN1->new();
+        $parser->configure(
+            encoding => "DER",
+            encode   => { time => "utctime" },
+            decode   => { time => "utctime" }
+        );
+        my $res = $parser->prepare(MANIFEST_ASN1());
+        if (not $res) {
+            die $parser->error();
+        }
+        $parser = $parser->find('Manifest');
     }
-    $parser = $parser->find('Manifest');
 
     my $self = { parser => $parser };
     bless $self, $class;

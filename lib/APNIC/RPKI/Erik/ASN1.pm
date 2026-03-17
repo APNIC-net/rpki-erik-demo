@@ -62,9 +62,14 @@ use constant ERIK_ASN1 => q(
 
 our $VERSION = "0.01";
 
+my $parser;
+
 sub get_parser
 {
-    my $parser = Convert::ASN1->new();
+    if ($parser) {
+        return $parser;
+    }
+    $parser = Convert::ASN1->new();
     $parser->configure(
         encoding => "DER",
         encode   => { time => "utctime" },
