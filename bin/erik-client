@@ -12,7 +12,7 @@ sub usage
     print <<EOF;
 Usage:
 $0 --cache-dir {cache-dir} --server {host[:port]} --fqdn {fqdn}
-   [--use-snapshots] [--use-ttqs] [--out-dir {out-dir}]
+   [--use-snapshots] [--use-ttqs] [--out-dir {out-dir}] [--no-gc]
 
 Synchronises the local cache against the specified server for the
 specified RPKI repository FQDN.
@@ -22,6 +22,11 @@ based on the snapshot.
 
 If --out-dir is set, then new files will be written to that directory,
 instead of directly to the cache directory.
+
+By default, files that are no longer available remotely will be
+removed from the cache directory.  If --no-gc is set, then those files
+will be left in place.  Specifying --out-dir enables --no-gc
+implicitly.
 EOF
 
     exit(10);
@@ -30,7 +35,7 @@ EOF
 my %options;
 GetOptions(\%options, 'cache-dir=s', 'server=s', 'fqdn=s',
                       'use-snapshots', 'use-ttqs',
-                      'out-dir=s');
+                      'out-dir=s', 'no-gc');
 if (not $options{'cache-dir'}) {
     print "Please provide a cache directory.\n";
     usage();
@@ -50,6 +55,7 @@ my $fqdn = $options{'fqdn'};
 my $use_snapshots = exists $options{'use-snapshots'} ? 1 : 0;
 my $use_ttqs = exists $options{'use-ttqs'} ? 1 : 0;
 my $out_dir = $options{'out-dir'};
+my $no_gc = $options{'no-gc'};
 
 my $client =
     APNIC::RPKI::Erik::Client->new(
@@ -57,6 +63,7 @@ my $client =
         use_snapshots => $use_snapshots,
         use_ttqs      => $use_ttqs,
         out_dir       => $out_dir,
+        no_gc         => $no_gc,
     );
 $client->synchronise($server, [$fqdn]);
 
