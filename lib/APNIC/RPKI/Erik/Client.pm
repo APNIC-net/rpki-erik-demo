@@ -110,10 +110,7 @@ sub synchronise
         dprint("Requesting index for '$fqdn'");
         my $previously_synced = 0;
         if (-e "$dir/$fqdn") {
-            my $fc = scalar(`ls $dir/$fqdn`);
-            if ($fc) {
-                $previously_synced = 1;
-            }
+            $previously_synced = 1;
         }
         my $used_prefetch = 0;
         if ($previously_synced and not $use_snapshots) {
