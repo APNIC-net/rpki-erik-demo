@@ -8,6 +8,7 @@ use APNIC::RPKI::Erik::Index;
 use APNIC::RPKI::Erik::Partition;
 use APNIC::RPKI::Utils qw(dprint);
 use APNIC::RPKI::OpenSSL;
+use APNIC::RPKI::X509;
 
 use Cwd qw(cwd);
 use Digest::SHA;
@@ -15,6 +16,7 @@ use File::Path qw(mkpath);
 use File::Slurp qw(read_file write_file);
 use IO::Compress::Gzip;
 use JSON::XS qw(encode_json);
+use List::Util qw(first);
 use MIME::Base64 qw(encode_base64url);
 
 sub new
@@ -174,8 +176,15 @@ sub synchronise
             push @{$manifest_detail}, $manifest;
 
             my $ee_cert = $cms->payload()->{'content'}->{'certificates'}->[0];
-            my $aki = $openssl->get_aki($ee_cert);
-            push @{$manifest_detail}, $aki;
+            my $x509 = APNIC::RPKI::X509->new();
+            $x509->decode($ee_cert);
+            my $aki_raw_obj =
+                first { $_->{'extnID'} eq '2.5.29.35' }
+                    @{$x509->payload()->{'tbsCertificate'}->{'extensions'}};
+            my $aki_raw = $aki_raw_obj->{'extnValue'};
+            my $aki_str = lc(unpack('H*', $aki_raw));
+            $aki_str =~ s/^........//;
+            push @{$manifest_detail}, $aki_str;
         }
 
         my %partitions;
