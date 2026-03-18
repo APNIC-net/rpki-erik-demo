@@ -10,6 +10,7 @@ use APNIC::RPKI::Manifest;
 use APNIC::RPKI::OpenSSL;
 use APNIC::RPKI::Utils qw(dprint);
 
+use Convert::ASN1 qw(asn_read);
 use Cwd qw(cwd);
 use Data::Dumper;
 use Digest::SHA;
@@ -244,62 +245,17 @@ sub synchronise
                                 die "$GunzipError";
                             }
                             for (;;) {
-                                my $rfb;
-                                my $n = $z->read($rfb, 1);
+                                my $buffer;
+                                my $n = asn_read($z, $buffer);
                                 if (not $n) {
                                     last;
                                 }
-                                my $fb = unpack('C', $rfb);
-                                if ($fb != 0x30) {
-                                    die "Expected 0x30 for start of object";
-                                }
-                                my $tlb;
-                                $n = $z->read($tlb, 1);
-                                if ($n != 1) {
-                                    die "Expected additional byte after object";
-                                }
-                                my $lb = unpack('C', $tlb);
-                                my $new_object;
-                                if ($lb <= 127) {
-                                    dprint("Got short object in snapshot/TTQ ($lb bytes)");
-                                    $new_object = $rfb.$tlb;
-                                    $n = $z->read($new_object, $lb, 2);
-                                    if ($n != $lb) {
-                                        die "Expected '$lb' bytes but got '$n'";
-                                    }
-                                } else {
-                                    my $elb = $lb & 127;
-                                    dprint("Got object in snapshot/TTQ ($elb extra ".
-                                        "length bytes)");
-                                    my $raw_rlb;
-                                    $n = $z->read($raw_rlb, $elb);
-                                    if ($n != $elb) {
-                                        die "Expected '$elb' bytes but got '$n'";
-                                    }
-                                    my @rlb = unpack('C*', $raw_rlb);
-                                    @rlb = reverse @rlb;
-                                    my $new_length = 0;
-                                    for (my $i = 0; $i < @rlb; $i++) {
-                                        my $inc = ($rlb[$i] * (256 ** $i));
-                                        dprint("Byte $i: ".$rlb[$i]);
-                                        dprint("Increment $i: $inc");
-                                        $new_length += $inc;
-                                    }
-                                    dprint("Got object in snapshot/TTQ ($new_length ".
-                                        "bytes)");
-                                    $new_object = $rfb.$tlb.$raw_rlb;
-                                    my $bytes = 2 + $elb;
-                                    $n = $z->read($new_object, $new_length, length($new_object));
-                                    if ($n != $new_length) {
-                                        die "Expected '$new_length' bytes but got '$n'";
-                                    }
-                                }
 
                                 my $digest = Digest::SHA->new(256);
-                                $digest->add($new_object);
+                                $digest->add($buffer);
                                 my $digest_data = $digest->clone()->digest();
                                 my $path_segment = encode_base64url($digest_data);
-                                write_file("$ler/$path_segment", $new_object);
+                                write_file("$ler/$path_segment", $buffer);
                                 dprint("Wrote object to local relay ($path_segment)");
                                 $ler_file_count++;
                             }
