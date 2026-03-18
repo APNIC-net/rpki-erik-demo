@@ -132,7 +132,7 @@ sub synchronise
         if ($fqdn_to_sync and ($fqdn ne $fqdn_to_sync)) {
             next;
         }
-        dprint("Processing file '$file'");
+        dprint("Processing file '$file' in updater");
         $fqdn_to_manifests{$fqdn} ||= [];
         my ($ext) = ($file =~ /\.([a-z]*)$/);
 
@@ -164,13 +164,16 @@ sub synchronise
 
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash) = @{$manifest_detail};
+            dprint("Processing manifest '$file' for partitioning");
 
-            my $mdata = $openssl->verify_cms($file);
+            my $cms = APNIC::RPKI::CMS->new();
+            my $mft_data = read_file($file);
+            $cms->decode($mft_data);
             my $manifest = APNIC::RPKI::Manifest->new();
-            $manifest->decode($mdata);
+            $manifest->decode($cms->payload()->{'content'}->{'encapContentInfo'}->{'eContent'});
             push @{$manifest_detail}, $manifest;
 
-            my $ee_cert = $openssl->get_ee_cert($file);
+            my $ee_cert = $cms->payload()->{'content'}->{'certificates'}->[0];
             my $aki = $openssl->get_aki($ee_cert);
             push @{$manifest_detail}, $aki;
         }
@@ -179,6 +182,7 @@ sub synchronise
         my %mft_to_files;
         for my $manifest_detail (@manifest_details) {
             my ($file, $hash, $manifest, $aki) = @{$manifest_detail};
+            dprint("Processing manifest '$file' for partitioning (part 2)");
             $aki = lc $aki;
 
             my $tu = $manifest->this_update();
@@ -213,7 +217,11 @@ sub synchronise
 
         my @pds;
         my %pt_to_mft_to_file;
+        my $i = 1;
+        my $len = scalar(values %partitions);
         for my $partition (values %partitions) {
+            dprint("Processing partition $i/$len");
+            $i++;
             my $pcontent = $partition->encode();
 
             my $pdigest = Digest::SHA->new(256);

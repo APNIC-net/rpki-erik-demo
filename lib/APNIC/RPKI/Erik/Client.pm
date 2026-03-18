@@ -123,7 +123,7 @@ sub synchronise
                 APNIC::RPKI::Erik::Updater->new(
                     $cache_dir, $httpd_dir
                 );
-            my ($fpmf, $prd) = $updater->synchronise($fqdn);
+            my ($fpmf, undef) = $updater->synchronise($fqdn);
             $fqdn_to_pt_to_mft_to_file{$fqdn} = $fpmf;
             dprint("Generated partition data for '$fqdn' for synchronising");
             if ($use_ttqs) {
@@ -319,6 +319,17 @@ sub synchronise
                             warn "Falling back to standard synchronisation for '$fqdn'";
                         }
                     }
+                    dprint("Generating partition data for '$fqdn' for synchronising, after prefetch");
+                    my $cache_dir = $dir;
+                    my $httpd_dir = tempdir();
+                    my $updater =
+                        APNIC::RPKI::Erik::Updater->new(
+                            $cache_dir, $httpd_dir
+                        );
+                    my ($fpmf, undef) = $updater->synchronise($fqdn);
+                    $fqdn_to_pt_to_mft_to_file{$fqdn} = $fpmf;
+                    dprint("Generated partition data for '$fqdn' for synchronising, after prefetch");
+
                     my $base_url = "http://$hostname/.well-known";
                     my $index_url = "$base_url/erik/index/$fqdn";
                     dprint("Submitting fetch for '$index_url'");
