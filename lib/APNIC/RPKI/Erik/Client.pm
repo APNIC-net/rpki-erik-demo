@@ -121,49 +121,62 @@ sub synchronise
     if ($use_snapshots or $use_ttqs) {
         mkdir $ler;
     }
+    my $queued = 0;
     my $sent = 0;
     my $received = 0;
+    my $queue_size = 4;
+    my @pending_requests;
 
     my $add_http_request = sub {
         my ($url, $remote_id_key, %args) = @_;
         my $all_data = "";
-        $http->do_request(
-            uri         => URI->new($url),
-            on_header   => sub {
-                my ($headers) = @_;
-                my $resp = $headers;
-                my $all_length = $resp->headers()->header('Content-Length');
-                my $received = 0;
-                my $last_int_pct = 0;
-                dprint("Received headers for '$url' (size is '$all_length')");
-                return sub { my ($data) = @_;
-                             if ($data) {
-                                my $ld = length($data);
-                                $received += $ld;
-                                my $pct = sprintf('%.2f', (($received / $all_length) * 100));
-                                if (int($pct) > $last_int_pct) {
-                                    $last_int_pct = int($pct);
-                                    dprint("Received data for '$url' ($pct%)"); 
-                                }
-                                $all_data .= $data;
-                             } else {
-                                dprint("Received complete response for '$url'");
-                                $resp->content($all_data);
-                                push @remote_responses, [$resp, $remote_id_key];
-                             } };
-            },
-            on_error => sub {
-                my ($failure) = @_;
-                my $resp = HTTP::Response->new();
-                $resp->code(504);
-                $resp->content($failure);
-                my $req = HTTP::Request->new();
-                $req->uri($url);
-                $resp->request($req);
-                push @remote_responses, [$resp, $remote_id_key];
-            },
-            %args,
-        );
+        $queued++;
+        my $queued = time();
+        push @pending_requests, [$url, sub {
+            my $sent = time();
+            $http->do_request(
+                uri         => URI->new($url),
+                on_header   => sub {
+                    my ($headers) = @_;
+                    my $resp = $headers;
+                    my $all_length = $resp->headers()->header('Content-Length');
+                    my $received = 0;
+                    my $last_int_pct = 0;
+                    dprint("Received headers for '$url' (size is '$all_length')");
+                    return sub { my ($data) = @_;
+                                if ($data) {
+                                    my $ld = length($data);
+                                    $received += $ld;
+                                    my $pct = sprintf('%.2f', (($received / $all_length) * 100));
+                                    if (int($pct) > $last_int_pct) {
+                                        $last_int_pct = int($pct);
+                                        dprint("Received data for '$url' ($pct%)"); 
+                                    }
+                                    $all_data .= $data;
+                                } else {
+                                    dprint("Received complete response for '$url'");
+                                    $resp->content($all_data);
+                                    push @remote_responses, [$resp, $remote_id_key];
+                                } };
+                },
+                on_error => sub {
+                    my ($failure) = @_;
+                    my $error = time();
+                    my $sent_to_error = sprintf("%.2f", $error - $sent);
+                    my $queued_to_error = sprintf("%.2f", $error - $queued);
+                    dprint("HTTP error: '$url', '$failure', '$sent_to_error', '$queued_to_error'");
+
+                    my $resp = HTTP::Response->new();
+                    $resp->code(504);
+                    $resp->content($failure);
+                    my $req = HTTP::Request->new();
+                    $req->uri($url);
+                    $resp->request($req);
+                    push @remote_responses, [$resp, $remote_id_key];
+                },
+                %args,
+            );
+        }];
     };
 
     for my $fqdn (@{$fqdns}) {
@@ -201,7 +214,6 @@ sub synchronise
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
                     $add_http_request->($ttq_url, $remote_id_key);
-                    $sent++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'prefetch',
                         value => $fqdn
@@ -222,7 +234,6 @@ sub synchronise
                 # minute, snapshots get five minutes).
                 $add_http_request->($snapshot_url, $remote_id_key,
                                     (timeout => 300));
-                $sent++;
                 $id_to_rmd{$remote_id_key} = {
                     type  => 'prefetch',
                     value => $fqdn
@@ -238,7 +249,6 @@ sub synchronise
             $remote_id++;
             my $remote_id_key = "remote_id_$remote_id";
             $add_http_request->($index_url, $remote_id_key);
-            $sent++;
             $id_to_rmd{$remote_id_key} = {
                 type  => 'fqdn',
                 value => $fqdn
@@ -261,8 +271,18 @@ sub synchronise
     my $timer = IO::Async::Timer::Periodic->new(
         interval => 0.1,
         on_tick  => sub {
+            if (@pending_requests) {
+                my $push = $queue_size - ($sent - $received);
+                dprint("Push count is '$push' ($received/$sent, $queued)");
+                while (($push-- > 0) and @pending_requests) {
+                    my ($url, $pr) = @{shift @pending_requests};
+                    $pr->();
+                    $sent++;
+                    dprint("Actually submitted request for $url");
+                }
+            }
             my $ts = POSIX::strftime('%F %T', gmtime(time()));
-            dprint("Running periodic timer loop ($ts): processed $received/$sent");
+            dprint("Running periodic timer loop ($ts): processed $received/$sent (queued $queued)");
             while ((@remote_responses and ($res, $id) = @{shift @remote_responses})
                     or (@local_responses and ($res, $id) = @{shift @local_responses})) {
                 if ($id =~ /^remote_/) {
@@ -383,7 +403,6 @@ sub synchronise
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
                     $add_http_request->($index_url, $remote_id_key);
-                    $sent++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'fqdn',
                         value => $fqdn
@@ -434,7 +453,6 @@ sub synchronise
                                 $remote_id++;
                                 my $remote_id_key = "remote_id_$remote_id";
                                 $add_http_request->($partition_url, $remote_id_key);
-                                $sent++;
                                 $id_to_rmd{$remote_id_key} = {
                                     type  => 'partition',
                                     value => [$fqdn, $hash, $size]
@@ -527,7 +545,6 @@ sub synchronise
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
                                     $add_http_request->($manifest_url, $remote_id_key);
-                                    $sent++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'manifest',
                                         value => [$fqdn, $entry, $path, $pdir]
@@ -669,7 +686,6 @@ sub synchronise
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
                                     $add_http_request->($o_url, $remote_id_key);
-                                    $sent++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'object',
                                         value => [$fqdn, $fpath]
@@ -706,8 +722,8 @@ sub synchronise
                     }
                 }
             }
-            if ($sent == $received) {
-                dprint("Finished processing all requests ($received/$sent)");
+            if (($sent == $received) and ($queued == $received)) {
+                dprint("Finished processing all requests ($received/$sent/$queued)");
                 $loop->stop();
             }
         }
