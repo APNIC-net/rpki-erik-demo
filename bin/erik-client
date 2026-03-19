@@ -12,7 +12,8 @@ sub usage
 {
     print <<EOF;
 Usage:
-$0 --cache-dir {cache-dir} --server {host[:port]} --fqdn {fqdn}
+$0 --cache-dir {cache-dir} --server {host[:port]}
+   [--fqdn {fqdn}] [--fqdn-path {fqdn-path}]
    [--use-snapshots] [--use-ttqs] [--out-dir {out-dir}] [--no-gc]
 
 Synchronises the local cache against the specified server for the
@@ -29,15 +30,16 @@ removed from the cache directory.  If --no-gc is set, then those files
 will be left in place.  Specifying --out-dir enables --no-gc
 implicitly.
 
-{fqdn} can be either a literal FQDN, or a file containing a list of
-FQDNs.
+{fqdn} is a literal FQDN, while {fqdn-path} is the path to a file
+containing a list of FQDNs.  One or the other must be provided.
 EOF
 
     exit(10);
 }
 
 my %options;
-GetOptions(\%options, 'cache-dir=s', 'server=s', 'fqdn=s',
+GetOptions(\%options, 'cache-dir=s', 'server=s',
+                      'fqdn=s', 'fqdn-path=s',
                       'use-snapshots', 'use-ttqs',
                       'out-dir=s', 'no-gc');
 if (not $options{'cache-dir'}) {
@@ -48,21 +50,23 @@ if (not $options{'server'}) {
     print "Please provide a server.\n";
     usage();
 }
-if (not $options{'fqdn'}) {
-    print "Please provide an FQDN.\n";
+if ((not $options{'fqdn'})
+        and (not $options{'fqdn-path'})) {
+    print "Please provide an FQDN or an FQDN file path.\n";
     usage();
 }
 
 my $cache_dir = $options{'cache-dir'};
 my $server = $options{'server'};
 my $fqdn = $options{'fqdn'};
+my $fqdn_path = $options{'fqdn-path'};
 my $use_snapshots = exists $options{'use-snapshots'} ? 1 : 0;
 my $use_ttqs = exists $options{'use-ttqs'} ? 1 : 0;
 my $out_dir = $options{'out-dir'};
 my $no_gc = $options{'no-gc'};
 
-if (-e $fqdn) {
-    my @lines = read_file($fqdn);
+if ($fqdn_path) {
+    my @lines = read_file($fqdn_path);
     chomp for @lines;
     $fqdn = \@lines;
 } else {
