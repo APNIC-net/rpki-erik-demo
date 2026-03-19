@@ -112,11 +112,31 @@ sub synchronise
 
     my $add_http_request = sub {
         my ($url, $remote_id_key) = @_;
+        my $all_data = "";
         $http->do_request(
             uri         => URI->new($url),
-            on_response => sub {
-                my ($resp) = @_;
-                push @remote_responses, [$resp, $remote_id_key];
+            on_header   => sub {
+                my ($headers) = @_;
+                my $resp = $headers;
+                my $all_length = $resp->headers()->header('Content-Length');
+                my $received = 0;
+                my $last_int_pct = 0;
+                dprint("Received headers for '$url' (size is '$all_length')");
+                return sub { my ($data) = @_;
+                             if ($data) {
+                                my $ld = length($data);
+                                $received += $ld;
+                                my $pct = sprintf('%.2f', (($received / $all_length) * 100));
+                                if (int($pct) > $last_int_pct) {
+                                    $last_int_pct = int($pct);
+                                    dprint("Received data for '$url' ($pct%)"); 
+                                }
+                                $all_data .= $data;
+                             } else {
+                                dprint("Received complete response for '$url'");
+                                $resp->content($all_data);
+                                push @remote_responses, [$resp, $remote_id_key];
+                             } };
             },
             on_fail => sub {
                 my ($failure) = @_;
@@ -125,10 +145,6 @@ sub synchronise
                 $resp->content($failure);
                 push @remote_responses, [$resp, $remote_id_key];
             },
-            on_body_write => sub {
-                my ($bytes) = @_;
-                dprint("Received $bytes bytes of $url");
-            }
         );
     };
 

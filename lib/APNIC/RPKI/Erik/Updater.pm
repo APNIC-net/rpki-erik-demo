@@ -138,7 +138,7 @@ sub synchronise
 
         dprint("Processing file '$file' in updater");
         $fqdn_to_manifests{$fqdn} ||= [];
-        my ($ext) = ($file =~ /\.([a-z]*)$/);
+        my ($ext) = ($file =~ /.*\.(.*?)$/);
 
         my $digest = Digest::SHA->new(256);
         $digest->addfile($path);
