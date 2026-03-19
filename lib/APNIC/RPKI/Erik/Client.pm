@@ -650,7 +650,7 @@ sub synchronise
                                     dprint("Submitted fetch for file '$o_url'");
                                 }
                             } else {
-                                dprint("Do not need to fetch file '$file'");
+                                dprint("Do not need to fetch file '$fpath'");
                             }
                         }
                     }
