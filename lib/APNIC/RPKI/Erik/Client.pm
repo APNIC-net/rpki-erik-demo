@@ -96,8 +96,8 @@ sub synchronise
     my $loop = IO::Async::Loop->new();
     my $http = Net::Async::HTTP->new(
         fail_on_error            => 0,
-        max_connections_per_host => 8,
-        max_in_flight            => 8,
+        max_connections_per_host => 4,
+        max_in_flight            => 4,
         timeout                  => 60,
         stall_timeout            => 15,
     );
@@ -124,6 +124,8 @@ sub synchronise
     my $queued = 0;
     my $sent = 0;
     my $received = 0;
+    my $snapshots_done = 1;
+    my $snapshot_count = 0;
     my $queue_size = 4;
     my @pending_requests;
 
@@ -155,6 +157,12 @@ sub synchronise
                                     $all_data .= $data;
                                 } else {
                                     dprint("Received complete response for '$url'");
+                                    if ($url =~ /\/snapshot\//) {
+                                        $snapshot_count--;
+                                        if ($snapshot_count == 0) {
+                                            $snapshots_done = 1;
+                                        }
+                                    }
                                     $resp->content($all_data);
                                     push @remote_responses, [$resp, $remote_id_key];
                                 } };
@@ -173,6 +181,12 @@ sub synchronise
                     $req->uri($url);
                     $resp->request($req);
                     push @remote_responses, [$resp, $remote_id_key];
+                    if ($url =~ /\/snapshot\//) {
+                        $snapshot_count--;
+                        if ($snapshot_count == 0) {
+                            $snapshots_done = 1;
+                        }
+                    }
                 },
                 %args,
             );
@@ -231,15 +245,17 @@ sub synchronise
                 $remote_id++;
                 my $remote_id_key = "remote_id_$remote_id";
                 # Extend the timeout for snapshots (default is one
-                # minute, snapshots get five minutes).
+                # minute, snapshots get 15 minutes (mainly due to ARIN)).
                 $add_http_request->($snapshot_url, $remote_id_key,
-                                    (timeout => 300));
+                                    (timeout => 900));
                 $id_to_rmd{$remote_id_key} = {
                     type  => 'prefetch',
                     value => $fqdn
                 };
                 $used_prefetch = 1;
                 dprint("Submitted fetch for '$snapshot_url'");
+                $snapshots_done = 0;
+                $snapshot_count++;
             }
         }
         if (not $used_prefetch) {
@@ -272,13 +288,20 @@ sub synchronise
         interval => 0.1,
         on_tick  => sub {
             if (@pending_requests) {
-                my $push = $queue_size - ($sent - $received);
-                dprint("Push count is '$push' ($received/$sent, $queued)");
+                my $qs = ($snapshots_done ? 4 : 1);
+                my $push = $qs - ($sent - $received);
+                dprint("Push count is '$push' ($received/$sent, $queued, $snapshot_count)");
                 while (($push-- > 0) and @pending_requests) {
-                    my ($url, $pr) = @{shift @pending_requests};
-                    $pr->();
-                    $sent++;
-                    dprint("Actually submitted request for $url");
+                    my $next_url = $pending_requests[0]->[0];
+                    if ($snapshots_done or ($next_url =~ /\/snapshot\//)) {
+                        my ($url, $pr) = @{shift @pending_requests};
+                        $pr->();
+                        $sent++;
+                        dprint("Actually submitted request for $url");
+                    } else {
+                        dprint("Not submitting pending requests (waiting for snapshot completion)");
+                        last;
+                    }
                 }
             }
             my $ts = POSIX::strftime('%F %T', gmtime(time()));
