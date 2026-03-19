@@ -81,6 +81,7 @@ my $client =
         out_dir       => $out_dir,
         no_gc         => $no_gc,
     );
-$client->synchronise($server, $fqdn);
+my $res = $client->synchronise($server, $fqdn);
+exit($res->{'success'} ? 0 : -1);
 
 1;

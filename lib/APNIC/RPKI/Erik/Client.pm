@@ -84,7 +84,7 @@ sub synchronise
         fail_on_error            => 0,
         max_connections_per_host => 8,
         max_in_flight            => 8,
-        timeout                  => 15,
+        timeout                  => 60,
         stall_timeout            => 15,
     );
     $loop->add($http);
@@ -111,7 +111,7 @@ sub synchronise
     my $received = 0;
 
     my $add_http_request = sub {
-        my ($url, $remote_id_key) = @_;
+        my ($url, $remote_id_key, %args) = @_;
         my $all_data = "";
         $http->do_request(
             uri         => URI->new($url),
@@ -138,13 +138,17 @@ sub synchronise
                                 push @remote_responses, [$resp, $remote_id_key];
                              } };
             },
-            on_fail => sub {
+            on_error => sub {
                 my ($failure) = @_;
                 my $resp = HTTP::Response->new();
-                $resp->code(500);
+                $resp->code(504);
                 $resp->content($failure);
+                my $req = HTTP::Request->new();
+                $req->uri($url);
+                $resp->request($req);
                 push @remote_responses, [$resp, $remote_id_key];
             },
+            %args,
         );
     };
 
@@ -200,7 +204,10 @@ sub synchronise
                 dprint("Submitting fetch for '$snapshot_url'");
                 $remote_id++;
                 my $remote_id_key = "remote_id_$remote_id";
-                $add_http_request->($snapshot_url, $remote_id_key);
+                # Extend the timeout for snapshots (default is one
+                # minute, snapshots get five minutes).
+                $add_http_request->($snapshot_url, $remote_id_key,
+                                    (timeout => 300));
                 $sent++;
                 $id_to_rmd{$remote_id_key} = {
                     type  => 'prefetch',
@@ -253,6 +260,8 @@ sub synchronise
                     my $fqdn = $value;
                     if (not $res->is_success()) {
                         dprint("Unable to fetch snapshot/TTQ for '$fqdn': ".Dumper($res));
+                        print STDERR "Unable to fetch snapshot/TTQ for '$fqdn': ".$res->status_line()."\n";
+                        print STDERR "Falling back to non-snapshot synchronisation for '$fqdn'\n";
                     } else {
                         $fqdn_to_ler{$fqdn} = 1;
                         my %hash_to_path;
@@ -370,6 +379,7 @@ sub synchronise
                     my $pt_to_mft_to_file = $fqdn_to_pt_to_mft_to_file{$fqdn};
                     if (not $res->is_success()) {
                         dprint("Unable to fetch index for '$fqdn': ".Dumper($res));
+                        print STDERR "Unable to fetch index for '$fqdn': ".$res->status_line()."\n";
                         $ok = 0;
                     } else {
                         dprint("Fetched index '$index_url'");
@@ -421,8 +431,8 @@ sub synchronise
                     my ($fqdn, $hash, $size) = @{$value};
                     my $partition_url = $res->request()->uri();
                     if (not $res->is_success()) {
-                        dprint("Unable to fetch partition for '$fqdn' ('$hash'): ".
-                            Dumper($res));
+                        dprint("Unable to fetch partition for '$fqdn' ('$hash'): ".Dumper($res));
+                        print STDERR "Unable to fetch partition for '$fqdn' ('$hash'): ".$res->status_line()."\n";
                         $ok = 0;
                     } else {
                         dprint("Fetched partition '$partition_url'");
@@ -531,8 +541,8 @@ sub synchronise
                     my ($fqdn, $entry, $path, $pdir) = @{$value};
                     my $manifest_url = $res->request()->uri();
                     if (not $res->is_success()) {
-                        dprint("Unable to fetch manifest for '$path': ".
-                            Dumper($res));
+                        dprint("Unable to fetch manifest for '$path': ".Dumper($res));
+                        print STDERR "Unable to fetch manifest for '$path': ".$res->status_line()."\n";
                         $ok = 0;
                     } else {
                         chdir $dir or die $!;
@@ -658,8 +668,8 @@ sub synchronise
                     my ($fqdn, $fpath) = @{$value};
                     my $object_url = $res->request()->uri();
                     if (not $res->is_success()) {
-                        dprint("Unable to fetch object for '$fpath': ".
-                            Dumper($res));
+                        dprint("Unable to fetch object for '$fpath': ".Dumper($res));
+                        print STDERR "Unable to fetch object for '$fpath': ".$res->status_line()."\n";
                         $ok = 0;
                     } else {
                         chdir $out_dir or die $!;
@@ -704,7 +714,7 @@ sub synchronise
         return;
     }
 
-    if ($gc) {
+    if ($gc and $ok) {
         for my $fqdn (@{$fqdns}) {
             chdir $dir or die $!;
             my @files = `find $fqdn -type f`;
@@ -730,7 +740,8 @@ sub synchronise
 
     dprint("Completed synchronisation");
 
-    return { local_file_count    => $ler_file_count,
+    return { success             => $ok,
+             local_file_count    => $ler_file_count,
              local_file_reliance => $ler_file_reliance };
 }
 
