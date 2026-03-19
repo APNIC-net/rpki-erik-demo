@@ -110,6 +110,28 @@ sub synchronise
     my $sent = 0;
     my $received = 0;
 
+    my $add_http_request = sub {
+        my ($url, $remote_id_key) = @_;
+        $http->do_request(
+            uri         => URI->new($url),
+            on_response => sub {
+                my ($resp) = @_;
+                push @remote_responses, [$resp, $remote_id_key];
+            },
+            on_fail => sub {
+                my ($failure) = @_;
+                my $resp = HTTP::Response->new();
+                $resp->code(500);
+                $resp->content($failure);
+                push @remote_responses, [$resp, $remote_id_key];
+            },
+            on_body_write => sub {
+                my ($bytes) = @_;
+                dprint("Received $bytes bytes of $url");
+            }
+        );
+    };
+
     for my $fqdn (@{$fqdns}) {
         dprint("Requesting index for '$fqdn'");
         my $previously_synced = 0;
@@ -144,20 +166,7 @@ sub synchronise
                     dprint("Submitting fetch for '$ttq_url'");
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
-                    $http->do_request(
-                        uri         => URI->new($ttq_url),
-                        on_response => sub {
-                            my ($resp) = @_;
-                            push @remote_responses, [$resp, $remote_id_key];
-                        },
-                        on_fail => sub {
-                            my ($failure) = @_;
-                            my $res = HTTP::Response->new();
-                            $res->code(500);
-                            $res->content($failure);
-                            push @remote_responses, [$res, $remote_id_key];
-                        }
-                    );
+                    $add_http_request->($ttq_url, $remote_id_key);
                     $sent++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'prefetch',
@@ -175,20 +184,7 @@ sub synchronise
                 dprint("Submitting fetch for '$snapshot_url'");
                 $remote_id++;
                 my $remote_id_key = "remote_id_$remote_id";
-                $http->do_request(
-                    uri         => URI->new($snapshot_url),
-                    on_response => sub {
-                        my ($resp) = @_;
-                        push @remote_responses, [$resp, $remote_id_key];
-                    },
-                    on_fail => sub {
-                        my ($failure) = @_;
-                        my $res = HTTP::Response->new();
-                        $res->code(500);
-                        $res->content($failure);
-                        push @remote_responses, [$res, $remote_id_key];
-                    }
-                );
+                $add_http_request->($snapshot_url, $remote_id_key);
                 $sent++;
                 $id_to_rmd{$remote_id_key} = {
                     type  => 'prefetch',
@@ -204,20 +200,7 @@ sub synchronise
             dprint("Submitting fetch for '$index_url'");
             $remote_id++;
             my $remote_id_key = "remote_id_$remote_id";
-            $http->do_request(
-                uri         => URI->new($index_url),
-                on_response => sub {
-                    my ($resp) = @_;
-                    push @remote_responses, [$resp, $remote_id_key];
-                },
-                on_fail => sub {
-                    my ($failure) = @_;
-                    my $res = HTTP::Response->new();
-                    $res->code(500);
-                    $res->content($failure);
-                    push @remote_responses, [$res, $remote_id_key];
-                }
-            );
+            $add_http_request->($index_url, $remote_id_key);
             $sent++;
             $id_to_rmd{$remote_id_key} = {
                 type  => 'fqdn',
@@ -359,20 +342,7 @@ sub synchronise
                     dprint("Submitting fetch for '$index_url'");
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
-                    $http->do_request(
-                        uri         => URI->new($index_url),
-                        on_response => sub {
-                            my ($resp) = @_;
-                            push @remote_responses, [$resp, $remote_id_key];
-                        },
-                        on_fail => sub {
-                            my ($failure) = @_;
-                            my $res = HTTP::Response->new();
-                            $res->code(500);
-                            $res->content($failure);
-                            push @remote_responses, [$res, $remote_id_key];
-                        }
-                    );
+                    $add_http_request->($index_url, $remote_id_key);
                     $sent++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'fqdn',
@@ -421,20 +391,7 @@ sub synchronise
                                 dprint("Submitting fetch for partition '$partition_url'");
                                 $remote_id++;
                                 my $remote_id_key = "remote_id_$remote_id";
-                                $http->do_request(
-                                    uri         => URI->new($partition_url),
-                                    on_response => sub {
-                                        my ($resp) = @_;
-                                        push @remote_responses, [$resp, $remote_id_key];
-                                    },
-                                    on_fail => sub {
-                                        my ($failure) = @_;
-                                        my $res = HTTP::Response->new();
-                                        $res->code(500);
-                                        $res->content($failure);
-                                        push @remote_responses, [$res, $remote_id_key];
-                                    }
-                                );
+                                $add_http_request->($partition_url, $remote_id_key);
                                 $sent++;
                                 $id_to_rmd{$remote_id_key} = {
                                     type  => 'partition',
@@ -526,20 +483,7 @@ sub synchronise
 
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
-                                    $http->do_request(
-                                        uri         => URI->new($manifest_url),
-                                        on_response => sub {
-                                            my ($resp) = @_;
-                                            push @remote_responses, [$resp, $remote_id_key];
-                                        },
-                                        on_fail => sub {
-                                            my ($failure) = @_;
-                                            my $res = HTTP::Response->new();
-                                            $res->code(500);
-                                            $res->content($failure);
-                                            push @remote_responses, [$res, $remote_id_key];
-                                        }
-                                    );
+                                    $add_http_request->($manifest_url, $remote_id_key);
                                     $sent++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'manifest',
@@ -680,20 +624,7 @@ sub synchronise
 
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
-                                    $http->do_request(
-                                        uri         => URI->new($o_url),
-                                        on_response => sub {
-                                            my ($resp) = @_;
-                                            push @remote_responses, [$resp, $remote_id_key];
-                                        },
-                                        on_fail => sub {
-                                            my ($failure) = @_;
-                                            my $res = HTTP::Response->new();
-                                            $res->code(500);
-                                            $res->content($failure);
-                                            push @remote_responses, [$res, $remote_id_key];
-                                        }
-                                    );
+                                    $add_http_request->($o_url, $remote_id_key);
                                     $sent++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'object',
