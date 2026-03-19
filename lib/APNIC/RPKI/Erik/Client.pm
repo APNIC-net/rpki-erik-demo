@@ -244,7 +244,8 @@ sub synchronise
             dprint("Submitted fetch for '$index_url'");
         }
         if (not -e "$dir/$fqdn") {
-            mkdir "$dir/$fqdn" or die $!;
+            mkdir "$dir/$fqdn"
+                or die "Unable to make directory '$dir/$fqdn': $!";
         }
         my $time = time();
         my $res = utime($time, $time, "$dir/$fqdn");
