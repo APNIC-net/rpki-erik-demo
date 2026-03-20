@@ -5,6 +5,7 @@ use strict;
 
 use APNIC::RPKI::Erik::ASN1;
 
+use Clone qw(clone);
 use Convert::ASN1;
 use DateTime;
 use JSON::XS qw(encode_json);
@@ -119,10 +120,13 @@ sub to_json
         version        => $self->version(),
         partition_time => $self->partition_time()->strftime('%F %T'),
         hash_algorithm => "sha256",
-        manifest_list  => $self->manifest_list()
+        manifest_list  => []
     );
-    for my $ml (@{$data{'manifest_list'}}) {
-        $ml->{'this_update'} = $ml->{'this_update'}->strftime('%F %T');
+    my @new_manifest_list;
+    for my $ml (@{$self->manifest_list()}) {
+        my $ml2 = clone($ml);
+        $ml2->{'this_update'} = $ml2->{'this_update'}->strftime('%F %T');
+        push @{$data{'manifest_list'}}, $ml2;
     }
 
     return encode_json(\%data);

@@ -553,7 +553,7 @@ sub synchronise
                             mkpath("$out_dir/$pdir");
                             my $get = 0;
                             my $read_path;
-                            if (-e "$out_dir/$path") {
+                            if (($dir ne $out_dir) and (-e "$out_dir/$path")) {
                                 # Written by prefetch already, so no
                                 # need to fetch.
                                 $read_path = "$out_dir/$path";
@@ -715,7 +715,7 @@ sub synchronise
                             my $hash = $file->{'hash'};
                             my $fpath = "$pdir/$filename";
                             my $get = 0;
-                            if (-e "$out_dir/$fpath") {
+                            if (($dir ne $out_dir) and (-e "$out_dir/$fpath")) {
                                 # Written by prefetch already, so no
                                 # need to fetch.
                             } elsif (-e "$dir/$fpath") {
