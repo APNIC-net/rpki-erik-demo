@@ -16,7 +16,7 @@ $0 --cache-dir {cache-dir} --server {host[:port]}
    [--fqdn {fqdn}] [--fqdn-path {fqdn-path}]
    [--use-snapshots] [--use-ttqs] [--out-dir {out-dir}] [--no-gc]
    [--procs {procs}] [--snapshot-procs {snapshot-procs}]
-   [--adaptive]
+   [--adaptive] [--snapshots-only]
 
 Synchronises the local cache against the specified server for the
 specified RPKI repository FQDN.
@@ -39,6 +39,9 @@ containing a list of FQDNs.  One or the other must be provided.
 the same time.  {snapshot-procs} is the same, but limited to snapshot
 fetches.  --adaptive reduces the number of concurrent requests that
 are in play when a timeout error is received.
+
+--snapshots-only skips tree synchronisation after loading from
+snapshots.
 EOF
 
     exit(10);
@@ -49,8 +52,8 @@ GetOptions(\%options, 'cache-dir=s', 'server=s',
                       'fqdn=s', 'fqdn-path=s',
                       'use-snapshots', 'use-ttqs',
                       'out-dir=s', 'no-gc',
-                      'procs=d', 'snapshot-procs=d',
-                      'adaptive');
+                      'procs=i', 'snapshot-procs=i',
+                      'adaptive', 'snapshots-only');
 if (not $options{'cache-dir'}) {
     print "Please provide a cache directory.\n";
     usage();
@@ -76,6 +79,7 @@ my $no_gc = $options{'no-gc'};
 my $procs = $options{'procs'};
 my $snapshot_procs = $options{'snapshot-procs'};
 my $adaptive = $options{'adaptive'};
+my $snapshots_only = $options{'snapshots-only'};
 
 if ($fqdn_path) {
     my @lines = read_file($fqdn_path);
@@ -95,6 +99,7 @@ my $client =
         procs          => $procs,
         snapshot_procs => $snapshot_procs,
         adaptive       => $adaptive,
+        snapshots_only => $snapshots_only,
     );
 my $res = $client->synchronise($server, $fqdn);
 exit($res->{'success'} ? 0 : -1);

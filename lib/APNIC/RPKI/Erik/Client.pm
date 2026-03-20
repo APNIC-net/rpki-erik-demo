@@ -86,6 +86,7 @@ sub synchronise
     my $snapshot_procs = $self->{'snapshot_procs'} || 1;
     my $adaptive_procs = $self->{'adaptive'};
     my $adaptive_mult = 1;
+    my $snapshots_only = $self->{'snapshots_only'} || 0;
 
     my $ok = 1;
 
@@ -415,29 +416,34 @@ sub synchronise
                             warn "Falling back to standard synchronisation for '$fqdn'";
                         }
                     }
-                    dprint("Generating partition data for '$fqdn' for synchronising, after prefetch");
-                    my $cache_dir = $dir;
-                    my $httpd_dir = tempdir();
-                    my $updater =
-                        APNIC::RPKI::Erik::Updater->new(
-                            $cache_dir, $httpd_dir
-                        );
-                    my ($fpmf, undef) = $updater->synchronise($fqdn);
-                    $fqdn_to_pt_to_mft_to_file{$fqdn} = $fpmf;
-                    dprint("Generated partition data for '$fqdn' for synchronising, after prefetch");
+                    if (($index_url =~ /\/snapshot\//)
+                            and $snapshots_only) {
+                        dprint("Skipping tree synchronisation after loading snapshot");
+                    } else {
+                        dprint("Generating partition data for '$fqdn' for synchronising, after prefetch");
+                        my $cache_dir = $dir;
+                        my $httpd_dir = tempdir();
+                        my $updater =
+                            APNIC::RPKI::Erik::Updater->new(
+                                $cache_dir, $httpd_dir
+                            );
+                        my ($fpmf, undef) = $updater->synchronise($fqdn);
+                        $fqdn_to_pt_to_mft_to_file{$fqdn} = $fpmf;
+                        dprint("Generated partition data for '$fqdn' for synchronising, after prefetch");
 
-                    my $base_url = "$url_prefix/.well-known";
-                    my $index_url = "$base_url/erik/index/$fqdn";
-                    dprint("Submitting fetch for '$index_url'");
-                    $remote_id++;
-                    my $remote_id_key = "remote_id_$remote_id";
-                    push(@pending_requests, [$index_url, $remote_id_key, time()]);
-                    $queued++;
-                    $id_to_rmd{$remote_id_key} = {
-                        type  => 'fqdn',
-                        value => $fqdn
-                    };
-                    dprint("Submitted fetch for '$index_url'");
+                        my $base_url = "$url_prefix/.well-known";
+                        my $index_url = "$base_url/erik/index/$fqdn";
+                        dprint("Submitting fetch for '$index_url'");
+                        $remote_id++;
+                        my $remote_id_key = "remote_id_$remote_id";
+                        push(@pending_requests, [$index_url, $remote_id_key, time()]);
+                        $queued++;
+                        $id_to_rmd{$remote_id_key} = {
+                            type  => 'fqdn',
+                            value => $fqdn
+                        };
+                        dprint("Submitted fetch for '$index_url'");
+                    }
                 } elsif ($type eq 'fqdn') {
                     my $fqdn = $value;
                     my $pt_to_mft_to_file = $fqdn_to_pt_to_mft_to_file{$fqdn};
