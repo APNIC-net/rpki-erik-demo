@@ -13,7 +13,6 @@ r.magellan.ipxo.com
 repo-rpki.idnic.net
 repo.rpki.space
 repository.lacnic.net
-rki.plasmanodes.com
 rov-measurements.nlnetlabs.net
 rpki-01.pdxnet.uk
 rpki-pp.com
@@ -33,9 +32,7 @@ rpki.arin.net
 rpki.blw.moe
 rpki.cc
 rpki.cernet.net
-rpki.cnnic.cn
 rpki.gns.net.br
-rpki.gxt.network
 rpki.komorebi.network
 rpki.multacom.com
 rpki.nellicus.net
@@ -55,5 +52,4 @@ rrdp.as214749.net
 rsync.krill.nlnetlabs.nl
 rsync.paas.rpki.ripe.net
 rsync.rp.ki
-rsync.rpki.tianhai.link
 sakuya.nat.moe
