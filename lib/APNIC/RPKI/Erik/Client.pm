@@ -96,8 +96,8 @@ sub synchronise
     my $loop = IO::Async::Loop->new();
     my $http = Net::Async::HTTP->new(
         fail_on_error            => 0,
-        max_connections_per_host => 4,
-        max_in_flight            => 4,
+        max_connections_per_host => 16,
+        max_in_flight            => 16,
         timeout                  => 60,
         stall_timeout            => 15,
     );
@@ -130,67 +130,6 @@ sub synchronise
     my @pending_requests;
 
     my $add_http_request = sub {
-        my ($url, $remote_id_key, %args) = @_;
-        my $all_data = "";
-        $queued++;
-        my $queued = time();
-        push @pending_requests, [$url, sub {
-            my $sent = time();
-            $http->do_request(
-                uri         => URI->new($url),
-                on_header   => sub {
-                    my ($headers) = @_;
-                    my $resp = $headers;
-                    my $all_length = $resp->headers()->header('Content-Length');
-                    my $received = 0;
-                    my $last_int_pct = 0;
-                    dprint("Received headers for '$url' (size is '$all_length')");
-                    return sub { my ($data) = @_;
-                                if ($data) {
-                                    my $ld = length($data);
-                                    $received += $ld;
-                                    my $pct = sprintf('%.2f', (($received / $all_length) * 100));
-                                    if (int($pct) > $last_int_pct) {
-                                        $last_int_pct = int($pct);
-                                        dprint("Received data for '$url' ($pct%)"); 
-                                    }
-                                    $all_data .= $data;
-                                } else {
-                                    dprint("Received complete response for '$url'");
-                                    if ($url =~ /\/snapshot\//) {
-                                        $snapshot_count--;
-                                        if ($snapshot_count == 0) {
-                                            $snapshots_done = 1;
-                                        }
-                                    }
-                                    $resp->content($all_data);
-                                    push @remote_responses, [$resp, $remote_id_key];
-                                } };
-                },
-                on_error => sub {
-                    my ($failure) = @_;
-                    my $error = time();
-                    my $sent_to_error = sprintf("%.2f", $error - $sent);
-                    my $queued_to_error = sprintf("%.2f", $error - $queued);
-                    dprint("HTTP error: '$url', '$failure', '$sent_to_error', '$queued_to_error'");
-
-                    my $resp = HTTP::Response->new();
-                    $resp->code(504);
-                    $resp->content($failure);
-                    my $req = HTTP::Request->new();
-                    $req->uri($url);
-                    $resp->request($req);
-                    push @remote_responses, [$resp, $remote_id_key];
-                    if ($url =~ /\/snapshot\//) {
-                        $snapshot_count--;
-                        if ($snapshot_count == 0) {
-                            $snapshots_done = 1;
-                        }
-                    }
-                },
-                %args,
-            );
-        }];
     };
 
     for my $fqdn (@{$fqdns}) {
@@ -227,7 +166,8 @@ sub synchronise
                     dprint("Submitting fetch for '$ttq_url'");
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
-                    $add_http_request->($ttq_url, $remote_id_key);
+                    push(@pending_requests, [$ttq_url, $remote_id_key, time()]);
+                    $queued++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'prefetch',
                         value => $fqdn
@@ -246,8 +186,8 @@ sub synchronise
                 my $remote_id_key = "remote_id_$remote_id";
                 # Extend the timeout for snapshots (default is one
                 # minute, snapshots get 15 minutes (mainly due to ARIN)).
-                $add_http_request->($snapshot_url, $remote_id_key,
-                                    (timeout => 900));
+                push(@pending_requests, [$snapshot_url, $remote_id_key, time(), {timeout => 900}]);
+                $queued++;
                 $id_to_rmd{$remote_id_key} = {
                     type  => 'prefetch',
                     value => $fqdn
@@ -264,7 +204,8 @@ sub synchronise
             dprint("Submitting fetch for '$index_url'");
             $remote_id++;
             my $remote_id_key = "remote_id_$remote_id";
-            $add_http_request->($index_url, $remote_id_key);
+            push(@pending_requests, [$index_url, $remote_id_key, time()]);
+            $queued++;
             $id_to_rmd{$remote_id_key} = {
                 type  => 'fqdn',
                 value => $fqdn
@@ -288,14 +229,70 @@ sub synchronise
         interval => 0.1,
         on_tick  => sub {
             if (@pending_requests) {
-                my $qs = ($snapshots_done ? 4 : 1);
+                my $qs = ($snapshots_done ? 16 : 1);
                 my $push = $qs - ($sent - $received);
                 dprint("Push count is '$push' ($received/$sent, $queued, $snapshot_count)");
                 while (($push-- > 0) and @pending_requests) {
                     my $next_url = $pending_requests[0]->[0];
                     if ($snapshots_done or ($next_url =~ /\/snapshot\//)) {
-                        my ($url, $pr) = @{shift @pending_requests};
-                        $pr->();
+                        my $pr_data = shift @pending_requests;
+                        my ($url, $remote_id_key, $queued, $args) = @{$pr_data};
+                        my $all_data = "";
+                        my $sent_time = time();
+                        $http->do_request(
+                            uri         => URI->new($url),
+                            on_header   => sub {
+                                my ($headers) = @_;
+                                my $resp = $headers;
+                                my $all_length = $resp->headers()->header('Content-Length');
+                                my $received = 0;
+                                my $last_int_pct = 0;
+                                dprint("Received headers for '$url' (size is '$all_length')");
+                                return sub { my ($data) = @_;
+                                            if ($data) {
+                                                my $ld = length($data);
+                                                $received += $ld;
+                                                my $pct = sprintf('%.2f', (($received / $all_length) * 100));
+                                                if (int($pct) > $last_int_pct) {
+                                                    $last_int_pct = int($pct);
+                                                    dprint("Received data for '$url' ($pct%)"); 
+                                                }
+                                                $all_data .= $data;
+                                            } else {
+                                                dprint("Received complete response for '$url'");
+                                                if ($url =~ /\/snapshot\//) {
+                                                    $snapshot_count--;
+                                                    if ($snapshot_count == 0) {
+                                                        $snapshots_done = 1;
+                                                    }
+                                                }
+                                                $resp->content($all_data);
+                                                push @remote_responses, [$resp, $remote_id_key];
+                                            } };
+                            },
+                            on_error => sub {
+                                my ($failure) = @_;
+                                my $error = time();
+                                my $sent_to_error = sprintf("%.2f", $error - $sent_time);
+                                my $queued_to_error = sprintf("%.2f", $error - $queued);
+                                dprint("HTTP error: '$url', '$failure', '$sent_to_error', '$queued_to_error'");
+
+                                my $resp = HTTP::Response->new();
+                                $resp->code(504);
+                                $resp->content($failure);
+                                my $req = HTTP::Request->new();
+                                $req->uri($url);
+                                $resp->request($req);
+                                push @remote_responses, [$resp, $remote_id_key];
+                                if ($url =~ /\/snapshot\//) {
+                                    $snapshot_count--;
+                                    if ($snapshot_count == 0) {
+                                        $snapshots_done = 1;
+                                    }
+                                }
+                            },
+                            %{$args || {}},
+                        );
                         $sent++;
                         dprint("Actually submitted request for $url");
                     } else {
@@ -425,7 +422,8 @@ sub synchronise
                     dprint("Submitting fetch for '$index_url'");
                     $remote_id++;
                     my $remote_id_key = "remote_id_$remote_id";
-                    $add_http_request->($index_url, $remote_id_key);
+                    push(@pending_requests, [$index_url, $remote_id_key, time()]);
+                    $queued++;
                     $id_to_rmd{$remote_id_key} = {
                         type  => 'fqdn',
                         value => $fqdn
@@ -475,7 +473,8 @@ sub synchronise
                                 dprint("Submitting fetch for partition '$partition_url'");
                                 $remote_id++;
                                 my $remote_id_key = "remote_id_$remote_id";
-                                $add_http_request->($partition_url, $remote_id_key);
+                                push(@pending_requests, [$partition_url, $remote_id_key, time()]);
+                                $queued++;
                                 $id_to_rmd{$remote_id_key} = {
                                     type  => 'partition',
                                     value => [$fqdn, $hash, $size]
@@ -567,7 +566,8 @@ sub synchronise
 
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
-                                    $add_http_request->($manifest_url, $remote_id_key);
+                                    push(@pending_requests, [$manifest_url, $remote_id_key, time()]);
+                                    $queued++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'manifest',
                                         value => [$fqdn, $entry, $path, $pdir]
@@ -708,7 +708,8 @@ sub synchronise
 
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
-                                    $add_http_request->($o_url, $remote_id_key);
+                                    push(@pending_requests, [$o_url, $remote_id_key, time()]);
+                                    $queued++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'object',
                                         value => [$fqdn, $fpath]
