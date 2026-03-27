@@ -653,7 +653,7 @@ sub synchronise
                     my $manifest_url = $res->request()->uri();
                     if (not $res->is_success()) {
                         dprint("Unable to fetch manifest for '$path': ".Dumper($res));
-                        print STDERR "Unable to fetch manifest for '$path': ".$res->status_line()."\n";
+                        print STDERR "Unable to fetch manifest for '$path' via $manifest_url: ".$res->status_line()."\n";
                         $ok = 0;
                     } else {
                         chdir $dir or die $!;
