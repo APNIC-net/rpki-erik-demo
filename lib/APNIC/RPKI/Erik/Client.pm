@@ -20,6 +20,7 @@ use File::Slurp qw(read_file write_file);
 use File::Temp qw(tempdir);
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
+use List::Util qw(shuffle);
 use Net::Async::HTTP;
 use IO::Uncompress::Gunzip qw($GunzipError);
 use JSON::XS qw(encode_json decode_json);
@@ -532,7 +533,7 @@ sub synchronise
                         $partition->decode($partition_content);
                         dprint("Decoded partition '$partition_url'");
 
-                        my @manifest_list = @{$partition->manifest_list()};
+                        my @manifest_list = shuffle @{$partition->manifest_list()};
                         my $any_get = 0;
                         for my $entry (@manifest_list) {
                             my ($mftnum, $size, $this_update, $hash, $locations, $aki) =
