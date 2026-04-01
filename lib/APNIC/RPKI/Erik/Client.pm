@@ -748,7 +748,7 @@ sub synchronise
                                         type  => 'object',
                                         value => [$fqdn, $fpath]
                                     };
-                                    push @local_responses, [$res, $local_id_key];
+                                    unshift @local_responses, [$res, $local_id_key];
                                     $handled = 1;
                                 }
                                 if (not $handled and $fqdn_to_ler{$fqdn}) {
@@ -761,7 +761,10 @@ sub synchronise
 
                                     $remote_id++;
                                     my $remote_id_key = "remote_id_$remote_id";
-                                    push(@pending_requests, [$o_url, $remote_id_key, time()]);
+                                    # These requests should take
+                                    # priority over requests for
+                                    # manifests.
+                                    unshift(@pending_requests, [$o_url, $remote_id_key, time()]);
                                     $queued++;
                                     $id_to_rmd{$remote_id_key} = {
                                         type  => 'object',
