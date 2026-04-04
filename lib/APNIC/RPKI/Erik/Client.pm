@@ -256,7 +256,7 @@ sub synchronise
                 if ($qs < 1) {
                     $qs = 1;
                 }
-                $qs *= 8;
+                $qs *= 4;
                 my $push = $qs - ($sent - $received);
                 dprint("Push count is '$push' ($received/$sent, $queued, $snapshot_count)");
                 while (($push-- > 0) and @pending_requests) {
