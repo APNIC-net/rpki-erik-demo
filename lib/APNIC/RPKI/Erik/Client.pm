@@ -83,7 +83,7 @@ sub synchronise
         }
     }
     my $url_prefix = "$scheme://$host:$port";
-    my $procs = $self->{'procs'} || 16;
+    my $procs = $self->{'procs'} || 64;
     my $snapshot_procs = $self->{'snapshot_procs'} || 1;
     my $adaptive_procs = $self->{'adaptive'};
     my $adaptive_mult = 1;
@@ -256,6 +256,7 @@ sub synchronise
                 if ($qs < 1) {
                     $qs = 1;
                 }
+                $qs *= 8;
                 my $push = $qs - ($sent - $received);
                 dprint("Push count is '$push' ($received/$sent, $queued, $snapshot_count)");
                 while (($push-- > 0) and @pending_requests) {
@@ -323,6 +324,7 @@ sub synchronise
                             },
                             %{$args || {}},
                         );
+                        dprint("Sent remote response $remote_id_key");
                         $sent++;
                         dprint("Actually submitted request for $url");
                     } else {
@@ -336,6 +338,7 @@ sub synchronise
             while ((@remote_responses and ($res, $id) = @{shift @remote_responses})
                     or (@local_responses and ($res, $id) = @{shift @local_responses})) {
                 if ($id =~ /^remote_/) {
+                    dprint("Received remote response $id");
                     $received++;
                 }
                 my $rmd = delete $id_to_rmd{$id};
@@ -804,7 +807,9 @@ sub synchronise
                     }
                 }
             }
-            if (($sent == $received) and ($queued == $received)) {
+            # todo: Should be == for both, but received has
+            # occasionally had a higher value, for some reason.
+            if (($sent <= $received) and ($queued <= $received)) {
                 dprint("Finished processing all requests ($received/$sent/$queued)");
                 $loop->stop();
             }
