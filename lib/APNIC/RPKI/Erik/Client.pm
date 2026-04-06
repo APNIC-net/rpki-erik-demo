@@ -305,7 +305,7 @@ sub synchronise
                                 dprint("HTTP error: '$url', '$failure', '$sent_to_error', '$queued_to_error'");
 
                                 my $resp = HTTP::Response->new();
-                                $resp->code(504);
+                                $resp->code(000);
                                 $resp->content($failure);
                                 my $req = HTTP::Request->new();
                                 $req->uri($url);
