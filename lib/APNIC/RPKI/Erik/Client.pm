@@ -110,6 +110,8 @@ sub synchronise
         stall_timeout            => 15,
         pipeline                 => 0,
         decode_content           => 1,
+        write_len                => 8*1024*1024,
+        read_len                 => 8*1024*1024,
     );
     $loop->add($http);
 
