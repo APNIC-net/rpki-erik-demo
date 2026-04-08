@@ -108,6 +108,10 @@ sub synchronise
         max_in_flight            => $procs,
         timeout                  => 60,
         stall_timeout            => 15,
+        pipeline                 => 0,
+        decode_content           => 1,
+        write_len                => 8*1024*1024,
+        read_len                 => 8*1024*1024,
     );
     $loop->add($http);
 
@@ -271,22 +275,15 @@ sub synchronise
                             on_header   => sub {
                                 my ($headers) = @_;
                                 my $resp = $headers;
-                                my $all_length = $resp->headers()->header('Content-Length');
                                 my $received = 0;
-                                my $last_int_pct = 0;
-                                dprint("Received headers for '$url' (size is '$all_length')");
+                                dprint("Received headers for '$url'");
                                 return sub { my ($data) = @_;
                                             if ($data) {
                                                 my $ld = length($data);
                                                 $received += $ld;
-                                                my $pct = sprintf('%.2f', (($received / $all_length) * 100));
-                                                if (int($pct) > $last_int_pct) {
-                                                    $last_int_pct = int($pct);
-                                                    dprint("Received data for '$url' ($pct%)"); 
-                                                }
                                                 $all_data .= $data;
                                             } else {
-                                                dprint("Received complete response for '$url'");
+                                                dprint("Received complete response for '$url' (size is $received)");
                                                 if ($url =~ /\/snapshot\//) {
                                                     $snapshot_count--;
                                                     if ($snapshot_count == 0) {
